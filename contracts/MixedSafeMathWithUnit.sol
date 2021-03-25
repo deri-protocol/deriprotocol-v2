@@ -10,6 +10,7 @@ library MixedSafeMathWithUnit {
     int256 constant IONE = 10**18;
     int256 constant IMIN = -2**255;
 
+
     function utoi(uint256 a) internal pure returns (int256) {
         require(a <= UMAX, 'MixedSafeMathWithUnit.utoi: overflow');
         return int256(a);
@@ -31,12 +32,29 @@ library MixedSafeMathWithUnit {
     }
 
 
+    function add(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a + b;
+    }
+
+    function add(int256 a, int256 b) internal pure returns (int256) {
+        return a + b;
+    }
+
     function add(uint256 a, int256 b) internal pure returns (uint256) {
         return b >= 0 ? a + uint256(b) : a - uint256(-b);
     }
 
     function add(int256 a, uint256 b) internal pure returns (int256) {
         return a + utoi(b);
+    }
+
+
+    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a - b;
+    }
+
+    function sub(int256 a, int256 b) internal pure returns (int256) {
+        return a - b;
     }
 
     function sub(uint256 a, int256 b) internal pure returns (uint256) {
@@ -80,6 +98,7 @@ library MixedSafeMathWithUnit {
     function div(int256 a, uint256 b) internal pure returns (int256) {
         return a * IONE / utoi(b);
     }
+
 
     function rescale(uint256 a, uint256 decimals1, uint256 decimals2) internal pure returns (uint256) {
         return a * (10 ** decimals2) / (10 ** decimals1);

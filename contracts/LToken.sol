@@ -8,16 +8,16 @@ contract LToken is ERC20 {
 
     address public pool;
 
-    uint256 public marginId;
+    uint256 public baseId;
 
     modifier _pool_() {
         require(msg.sender == pool, 'LToken: can only be called by pool');
         _;
     }
 
-    constructor (string memory _name, string memory _symbol, address _pool, uint256 _marginId) ERC20(_name, _symbol) {
+    constructor (string memory _name, string memory _symbol, address _pool, uint256 _baseId) ERC20(_name, _symbol) {
         pool = _pool;
-        marginId = _marginId;
+        baseId = _baseId;
     }
 
     function setPool(address newPool) public _pool_ {

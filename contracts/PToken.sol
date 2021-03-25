@@ -10,7 +10,7 @@ contract PToken is ERC721 {
     using MixedSafeMathWithUnit for uint256;
     using MixedSafeMathWithUnit for int256;
 
-    event UpdateMargin(address indexed owner, uint256 indexed baseId, int256 amount);
+    event UpdateMargin(address indexed owner, uint256 indexed baseId, uint256 amount);
 
     event UpdatePosition(address indexed owner, uint256 indexed symbolId, int256 volume, int256 cost, int256 lastCumuFundingRate);
 
@@ -22,7 +22,7 @@ contract PToken is ERC721 {
 
     struct Portfolio {
         Position[] positions; // symbolId indexed
-        int256[] margins;    // baseId indexed
+        uint256[] margins;    // baseId indexed
         uint256 lastUpdateTimestamp;
     }
 
@@ -52,8 +52,16 @@ contract PToken is ERC721 {
         return (p.volume, p.cost, p.lastCumuFundingRate);
     }
 
-    function getMargin(address owner, uint256 baseId) public view returns (int256) {
+    function getMargin(address owner, uint256 baseId) public view returns (uint256) {
         return _tokenIdPortfolio[_ownerTokenId[owner]].margins[baseId];
+    }
+
+    function getPositions(address owner) public view returns (Position[] memory) {
+        return _tokenIdPortfolio[_ownerTokenId[owner]].positions;
+    }
+
+    function getMargins(address owner) public view returns (uint256[] memory) {
+        return _tokenIdPortfolio[_ownerTokenId[owner]].margins;
     }
 
     function mint(address owner, uint256 baseId, uint256 amount) public _pool_ {
@@ -69,11 +77,11 @@ contract PToken is ERC721 {
         _tokenIdOwner[tokenId] = owner;
         Portfolio storage p = _tokenIdPortfolio[tokenId];
 
-        p.margins[baseId] = amount.utoi();
+        p.margins[baseId] = amount;
         p.lastUpdateTimestamp = block.timestamp;
 
         emit Transfer(address(0), owner, tokenId);
-        emit UpdateMargin(owner, baseId, amount.utoi());
+        emit UpdateMargin(owner, baseId, amount);
     }
 
     function burn(address owner) public _pool_ {
@@ -101,7 +109,7 @@ contract PToken is ERC721 {
         emit Transfer(owner, address(0), tokenId);
     }
 
-    function updateMargin(address owner, uint256 baseId, int256 amount) public _pool_ {
+    function updateMargin(address owner, uint256 baseId, uint256 amount) public _pool_ {
         require(_exists(owner), 'PToken: update nonexistent token');
         Portfolio storage p = _tokenIdPortfolio[_ownerTokenId[owner]];
 

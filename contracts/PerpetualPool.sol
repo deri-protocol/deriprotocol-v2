@@ -55,6 +55,8 @@ contract PerpetualPool {
 
     uint256 public minInitialMarginRatio;
 
+    uint256 public basePnlCoverRatio;
+
     SymbolInfo[] public symbols; // symbolId indexed
 
     BaseInfo[] public bases;     // baseId indexed
@@ -96,8 +98,13 @@ contract PerpetualPool {
 
         volume += tradeVolume;
         cost += curCost - realizedCost;
-        int256 margin = IPToken(pTokenAddress).getMargin(msg.sender, 0);
-        IPToken(pTokenAddress).updateMargin(msg.sender, 0, margin - (funding.add(fee) + realizedCost).reformat(bases[0].decimals));
+        uint256 margin0 = IPToken(pTokenAddress).getMargin(msg.sender, 0);
+        int256 debt = funding.add(fee) + realizedCost - margin0.utoi();
+        if (debt < 0) {
+            _coverUserDebt(msg.sender, uint256(-debt));
+            margin0 = IPToken(pTokenAddress).getMargin(msg.sender, 0);
+        }
+        IPToken(pTokenAddress).updateMargin(msg.sender, 0, margin0.sub((funding.add(fee) + realizedCost).reformat(bases[0].decimals)));
         IPToken(pTokenAddress).updatePosition(msg.sender, symbolId, volume, cost, symbol.cumuFundingRate);
 
         symbol.tradersNetVolume += tradeVolume;
@@ -122,42 +129,6 @@ contract PerpetualPool {
         emit Trade(msg.sender, symbolId, tradeVolume, symbols[symbolId].price);
     }
 
-    function _checkPoolMargin() view internal {
-        uint256 totalLiquidity;
-        for (uint256 i = 0; i < bases.length; i++) {
-            BaseInfo storage b = bases[i];
-            totalLiquidity += b.liquidity.mul(b.price).mul(b.discount).add(b.pnl);
-        }
-        int256 totalCost;
-        for (uint256 i = 0; i < symbols.length; i++) {
-            SymbolInfo storage s = symbols[i];
-            totalCost += s.tradersNetVolume.mul(s.price).mul(s.multiplier);
-        }
-
-        require(totalCost == 0 || totalLiquidity.div(totalCost.abs()) >= minPoolMarginRatio, 'PerpetualPool._checkPoolMargin: insufficient liquidity');
-    }
-
-    function _checkUserMargin(address account) view internal {
-        int256 totalLiquidity;
-        int256 totalCost;
-        for (uint256 i = 0; i < bases.length; i++) {
-            int256 margin = IPToken(pTokenAddress).getMargin(account, i);
-            totalLiquidity += margin.mul(bases[i].price).mul(bases[i].discount);
-        }
-        for (uint256 i = 0; i < symbols.length; i++) {
-            (int256 volume, int256 cost, int256 lastCumuFundingRate) = IPToken(pTokenAddress).getPosition(account, i);
-            int256 delta;
-            unchecked { delta = symbols[i].cumuFundingRate - lastCumuFundingRate; }
-            int256 funding = volume.mul(delta);
-            int256 pnl = volume.mul(symbols[i].price).mul(symbols[i].multiplier) - cost;
-            totalLiquidity += pnl - funding;
-            totalCost += cost;
-        }
-
-        require(totalLiquidity >= 0 && (totalCost == 0 || totalLiquidity.div(totalCost.abs()) >= minInitialMarginRatio.utoi()),
-                'PerpetualPool._checkUserMargin: insufficient margin');
-    }
-
     function addLiquidity(uint256 baseId, uint256 bAmount) public {
         require(baseId < bases.length, 'PerpetualPool.addLiquidity: invalid baseId');
         _updatePrices();
@@ -177,20 +148,15 @@ contract PerpetualPool {
     function removeLiquidity(uint256 baseId, uint256 lShares) public {
         require(baseId < bases.length, 'PerpetualPool.removeLiquidity: not supported baseId');
         _updatePrices();
+        _coverBaseDebt(baseId);
 
         uint256 amount1;
         uint256 amount2;
 
         BaseInfo storage b = bases[baseId];
-        while (b.pnl < 0) {
-            amount1 = b.liquidity.mul(uint256(10**17));
-            amount2 = IExchange(b.exchangeAddress).sell(amount1);
-            b.liquidity -= amount1;
-            b.pnl = b.pnl.add(amount2);
-        }
 
         uint256 balance = ILToken(b.lTokenAddress).balanceOf(msg.sender);
-        if (balance - lShares < 10*18) lShares = balance;
+        if (balance - lShares < 10**18) lShares = balance;
 
         uint256 totalSupply = ILToken(b.lTokenAddress).totalSupply();
         amount1 = lShares.mul(b.liquidity).div(totalSupply);
@@ -205,14 +171,8 @@ contract PerpetualPool {
         b.liquidity -= amount1;
         b.pnl = b.pnl.sub(amount2);
 
-        uint256 totalLiquidity;
-        for (uint256 i = 0; i < bases.length; i++) {
-            totalLiquidity += bases[i].liquidity.mul(bases[i].price).mul(bases[i].discount).add(bases[i].pnl);
-        }
-        int256  totalCost;
-        for (uint256 i = 0; i < symbols.length; i++) {
-            totalCost += symbols[i].tradersNetVolume.mul(symbols[i].price).mul(symbols[i].multiplier);
-        }
+        uint256 totalLiquidity = _getPoolTotalLiquidity();
+        int256 totalCost = _getPoolTotalCost();
         require(totalCost == 0 || totalLiquidity.div(totalCost.abs()) >= minPoolMarginRatio, 'PerpetualPool.removeLiquidity: pool insufficient liquidity');
 
         ILToken(b.lTokenAddress).burn(msg.sender, lShares);
@@ -232,8 +192,8 @@ contract PerpetualPool {
         if (!IPToken(pTokenAddress).exists(msg.sender)) {
             IPToken(pTokenAddress).mint(msg.sender, baseId, bAmount);
         } else {
-            int256 margin = IPToken(pTokenAddress).getMargin(msg.sender, baseId);
-            IPToken(pTokenAddress).updateMargin(msg.sender, baseId, margin + bAmount.utoi());
+            uint256 margin = IPToken(pTokenAddress).getMargin(msg.sender, baseId);
+            IPToken(pTokenAddress).updateMargin(msg.sender, baseId, margin + bAmount);
         }
 
         emit AddMargin(msg.sender, baseId, bAmount);
@@ -246,39 +206,88 @@ contract PerpetualPool {
         bAmount = bAmount.reformat(bases[baseId].decimals);
 
         int256 funding;
-        int256 volume; int256 cost; int256 lastCumuFundingRate;
         for (uint256 i = 0; i < symbols.length; i++) {
-            (volume, cost, lastCumuFundingRate) = IPToken(pTokenAddress).getPosition(msg.sender, i);
+            (int256 volume, int256 cost, int256 lastCumuFundingRate) = IPToken(pTokenAddress).getPosition(msg.sender, i);
             if (volume != 0) {
-                funding += (symbols[i].cumuFundingRate - lastCumuFundingRate).mul(volume);
+                int256 delta;
+                unchecked { delta = symbols[i].cumuFundingRate - lastCumuFundingRate; }
+                funding += delta.mul(volume);
                 IPToken(pTokenAddress).updatePosition(msg.sender, i, volume, cost, symbols[i].cumuFundingRate);
             }
         }
 
-        int256 margin0 = IPToken(pTokenAddress).getMargin(msg.sender, 0);
-        IPToken(pTokenAddress).updateMargin(msg.sender, 0, margin0 - funding);
-
-        int256 margin = IPToken(pTokenAddress).getMargin(msg.sender, baseId);
-        require(margin >= bAmount.utoi(), 'PerpetualPool.removeMargin: exceeds balance');
-        IPToken(pTokenAddress).updateMargin(msg.sender, baseId, margin - bAmount.utoi());
-
-        int256 totalLiquidity;
-        for (uint256 i = 0; i < bases.length; i++) {
-            margin = IPToken(pTokenAddress).getMargin(msg.sender, i);
-            totalLiquidity += margin.mul(bases[i].price).mul(bases[i].discount);
-        }
-        int256 totalCost;
-        for (uint256 i = 0; i < symbols.length; i++) {
-            (volume, cost, lastCumuFundingRate) = IPToken(pTokenAddress).getPosition(msg.sender, i);
-            totalCost += cost;
+        uint256 margin0 = IPToken(pTokenAddress).getMargin(msg.sender, 0);
+        if (margin0.utoi() - funding >= 0) {
+            IPToken(pTokenAddress).updateMargin(msg.sender, 0, margin0.sub(funding));
+        } else {
+            uint256 debt = funding.sub(margin0).itou();
+            _coverUserDebt(msg.sender, debt);
         }
 
-        require(totalLiquidity >= 0 && (totalCost == 0 || totalLiquidity.div(totalCost.abs()).itou() >= minInitialMarginRatio),
-                'PerpetualPool.removeMargin: cause insufficient margin');
+        uint256 margin = IPToken(pTokenAddress).getMargin(msg.sender, baseId);
+        require(margin >= bAmount, 'PerpetualPool.removeMargin: insufficient margin');
+        IPToken(pTokenAddress).updateMargin(msg.sender, baseId, margin - bAmount);
+
+        uint256 totalLiquidity = _getUserTotalLiquidity(msg.sender);
+        int256 totalCost = _getUserTotalCost(msg.sender);
+        require(totalCost == 0 || totalLiquidity.div(totalCost.abs()) >= minInitialMarginRatio, 'PerpetualPool.removeMargin: insufficient margin');
 
         IERC20(bases[baseId].baseAddress).transfer(msg.sender, bAmount.rescale(18, bases[baseId].decimals));
 
         emit RemoveMargin(msg.sender, baseId, bAmount);
+    }
+
+    function _getUserTotalLiquidity(address account) internal view returns (uint256) {
+        uint256 totalLiquidity;
+        for (uint256 i = 0; i < bases.length; i++) {
+            uint256 margin = IPToken(pTokenAddress).getMargin(account, i);
+            totalLiquidity += margin.mul(bases[i].price).mul(bases[i].discount);
+        }
+        for (uint256 i = 0; i < symbols.length; i++) {
+            (int256 volume, int256 cost, ) = IPToken(pTokenAddress).getPosition(account, i);
+            int256 pnl = volume.mul(symbols[i].price).mul(symbols[i].multiplier) - cost;
+            totalLiquidity = totalLiquidity.add(pnl);
+        }
+        return totalLiquidity;
+    }
+
+    function _getUserTotalCost(address account) internal view returns (int256) {
+        int256 totalCost;
+        for (uint256 i = 0; i < symbols.length; i++) {
+            (int256 volume, , ) = IPToken(pTokenAddress).getPosition(account, i);
+            totalCost += volume.mul(symbols[i].price).mul(symbols[i].multiplier);
+        }
+        return totalCost;
+    }
+
+    function _checkUserMargin(address account) internal view {
+        uint256 totalLiquidity = _getUserTotalLiquidity(account);
+        int256 totalCost = _getUserTotalCost(account);
+        require(totalCost == 0 || totalLiquidity.div(totalCost.abs()) >= minInitialMarginRatio, 'PerpetualPool._checkUserMargin: insufficient margin');
+    }
+
+    function _getPoolTotalLiquidity() internal view returns (uint256) {
+        uint256 totalLiquidity;
+        for (uint256 i = 0; i < bases.length; i++) {
+            BaseInfo storage b = bases[i];
+            totalLiquidity += b.liquidity.mul(b.price).mul(b.discount).add(b.pnl);
+        }
+        return totalLiquidity;
+    }
+
+    function _getPoolTotalCost() internal view returns (int256) {
+        int256 totalCost;
+        for (uint256 i = 0; i < symbols.length; i++) {
+            SymbolInfo storage s = symbols[i];
+            totalCost += s.tradersNetVolume.mul(s.price).mul(s.multiplier);
+        }
+        return totalCost;
+    }
+
+    function _checkPoolMargin() internal view {
+        uint256 totalLiquidity = _getPoolTotalLiquidity();
+        int256 totalCost = _getPoolTotalCost();
+        require(totalCost == 0 || totalLiquidity.div(totalCost.abs()) >= minPoolMarginRatio, 'PerpetualPool._checkPoolMargin: insufficient liquidity');
     }
 
     function _updatePrices() internal {
@@ -302,7 +311,7 @@ contract PerpetualPool {
             unsettledPnl += s.tradersNetVolume.mul(delta);
             unchecked { s.cumuFundingRate += delta; }
 
-            int256 pnl = s.tradersNetVolume.mul(s.price) - s.tradersNetVolume.mul(newPrice);
+            int256 pnl = s.tradersNetVolume.mul(s.price).mul(s.multiplier) - s.tradersNetVolume.mul(newPrice).mul(s.multiplier);
             unsettledPnl += pnl;
             s.price = newPrice;
         }
@@ -315,6 +324,30 @@ contract PerpetualPool {
         }
 
         lastBlockNumber = block.number;
+    }
+
+    function _coverBaseDebt(uint256 baseId) internal {
+        BaseInfo storage b = bases[baseId];
+        uint256 amount = b.liquidity.mul(b.price).mul(b.discount).mul(basePnlCoverRatio);
+        while (b.pnl < 0) {
+            (uint256 amount1, uint256 amount2) = IExchange(b.exchangeAddress).sell(b.liquidity, amount.sub(b.pnl));
+            b.liquidity -= amount1;
+            b.pnl = b.pnl.add(amount2);
+        }
+    }
+
+    function _coverUserDebt(address account, uint256 debt) internal {
+        uint256 covered = IPToken(pTokenAddress).getMargin(account, 0);
+        for (uint256 i = 1; i < bases.length; i++) {
+            if (covered >= debt) break;
+            uint256 margin = IPToken(pTokenAddress).getMargin(account, i);
+            if (margin > 0) {
+                (uint256 amount1, uint256 amount2) = IExchange(bases[i].exchangeAddress).sell(margin, debt - covered);
+                IPToken(pTokenAddress).updateMargin(account, i, margin - amount1);
+                covered += amount2;
+            }
+        }
+        IPToken(pTokenAddress).updateMargin(account, 0, covered);
     }
 
     function _deflationCompatibleSafeTransferFrom(address baseAddress, uint256 decimals, address from, address to, uint256 bAmount) internal returns (uint256) {
@@ -330,6 +363,7 @@ contract PerpetualPool {
 
 
 interface IERC20 {
+    function decimals() external view returns (uint8);
     function balanceOf(address account) external view returns (uint256);
     function transfer(address to, uint256 amount) external returns (bool);
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
@@ -350,11 +384,11 @@ interface IPToken {
     function exists(address owner) external view returns (bool);
     function getPosition(address owner, uint256 symbolId) external view returns (int256, int256, int256);
     function mint(address owner, uint256 baseId, uint256 amount) external;
-    function getMargin(address owner, uint256 baseId) external view returns (int256);
-    function updateMargin(address owner, uint256 baseId, int256 amount) external;
+    function getMargin(address owner, uint256 baseId) external view returns (uint256);
+    function updateMargin(address owner, uint256 baseId, uint256 amount) external;
     function updatePosition(address owner, uint256 symbolId, int256 volume, int256 cost, int256 lastCumuFundingRate) external;
 }
 
 interface IExchange {
-    function sell(uint256 amount) external returns (uint256);
+    function sell(uint256 amount1, uint256 amount2) external returns (uint256, uint256); // maximumly sell amount1 to get amount2 in base0 token
 }
