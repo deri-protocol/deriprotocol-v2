@@ -94,8 +94,8 @@ contract PerpetualPool {
         BTokenInfo storage b = bTokens[bTokenId];
         require(b.pnl >= 0, 'PerpetualPool.removeLiquidity: negative bToken pnl');
 
-        uint256 balance = ILToken(b.lTokenAddress).balanceOf(msg.sender);
-        if (lShares >= balance || balance - lShares < UONE) lShares = balance;
+        // uint256 balance = ILToken(b.lTokenAddress).balanceOf(msg.sender);
+        // if (lShares >= balance || balance - lShares < UONE) lShares = balance;
 
         uint256 totalSupply = ILToken(b.lTokenAddress).totalSupply();
         uint256 amount1;
@@ -343,7 +343,7 @@ contract PerpetualPool {
     function _coverTraderDebt(address account) internal {
         int256[] memory margins = IPToken(pTokenAddress).getMargins(account);
         if (margins[0] >= 0) return;
-        for (uint256 i = 1; i < bTokens.length; i++) {
+        for (uint256 i = bTokens.length - 1; i > 0; i--) {
             if (margins[i] > 0) {
                 (uint256 amount1, uint256 amount2) = IBHandler(bTokens[i].handlerAddress).swap(margins[i].itou(), (-margins[0]).itou());
                 margins[i] -= amount1.utoi();

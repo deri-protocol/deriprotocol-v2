@@ -2,11 +2,15 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-interface ILToken {
+import './IERC20.sol';
 
-    function totalSupply() external view returns (uint256);
+interface ILToken is IERC20 {
 
-    function balanceOf(address account) external view returns (uint256);
+    function pool() external view returns (address);
+
+    function bTokenId() external view returns (uint256);
+
+    function setPool(address newPool) external;
 
     function mint(address account, uint256 amount) external;
 
