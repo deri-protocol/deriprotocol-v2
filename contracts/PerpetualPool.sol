@@ -361,6 +361,9 @@ contract PerpetualPool is MigratablePool {
                 symbols[i].tradersNetVolume -= positions[i].volume;
                 symbols[i].tradersNetCost -= positions[i].cost;
                 pnl += positions[i].volume * symbols[i].price / ONE * symbols[i].multiplier / ONE - positions[i].cost;
+
+                positions[i].volume = 0;
+                IPToken(pTokenAddress).updatePosition(account, i, positions[i]);
             }
         }
 
@@ -386,7 +389,9 @@ contract PerpetualPool is MigratablePool {
 
         _distributePnlToBTokens(netEquity - reward);
 
+        IPToken(pTokenAddress).burn(account);
         IERC20(bTokens[0].bTokenAddress).safeTransfer(msg.sender, reward.itou().rescale(18, bTokens[0].decimals));
+
         emit Liquidate(account);
     }
 
