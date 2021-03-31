@@ -408,7 +408,7 @@ contract PerpetualPool is MigratablePool {
             totalLiquidity += liquidity;
         }
 
-        int256 unsettledPnl;
+        int256 undistributedPnl;
         for (uint256 i = 0; i < symbols.length; i++) {
             SymbolInfo storage s = symbols[i];
             int256 price = ISymbolHandler(s.handlerAddress).getPrice().utoi();
@@ -417,17 +417,17 @@ contract PerpetualPool is MigratablePool {
             int256 delta;
             unchecked { delta = r * int256(block.number - lastUpdateBTokenStatusBlock); }
             int256 funding = s.tradersNetVolume * delta / ONE;
-            unsettledPnl += funding;
+            undistributedPnl += funding;
             unchecked { s.cumuFundingRate += delta; }
 
             int256 pnl = s.tradersNetVolume * (price - s.price) / ONE * s.multiplier / ONE;
-            unsettledPnl -= pnl;
+            undistributedPnl -= pnl;
             s.price = price;
         }
 
-        if (totalLiquidity != 0 && unsettledPnl != 0) {
+        if (totalLiquidity != 0 && undistributedPnl != 0) {
             for (uint256 i = 0; i < bTokens.length; i++) {
-                bTokens[i].pnl += (unsettledPnl * liquidities[i] / totalLiquidity).reformat(bTokens[i].decimals);
+                bTokens[i].pnl += (undistributedPnl * liquidities[i] / totalLiquidity).reformat(bTokens[i].decimals);
             }
         }
 
