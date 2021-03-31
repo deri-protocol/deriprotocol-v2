@@ -135,13 +135,8 @@ contract PToken is ERC721 {
 
     function burn(address owner) public _pool_ _existsOwner_(owner) {
         uint256 tokenId = _ownerTokenId[owner];
-        Portfolio storage p = _tokenIdPortfolio[tokenId];
-        for (uint256 i = 0; i < numSymbols; i++) {
-            require(p.positions[i].volume == 0, 'PToken.burn: non empty token');
-        }
 
         totalSupply -= 1;
-
         delete _ownerTokenId[owner];
         delete _tokenIdOwner[tokenId];
         delete _tokenIdPortfolio[tokenId];
