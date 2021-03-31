@@ -19,7 +19,6 @@ contract PToken is ERC721 {
     struct Portfolio {
         mapping (uint256 => Position) positions;    // symbolId indexed
         mapping (uint256 => int256) margins;        // bTokenId indexed
-        uint256 lastUpdateTimestamp;
     }
 
     string public name;
@@ -39,17 +38,36 @@ contract PToken is ERC721 {
     mapping (uint256 => Portfolio) private _tokenIdPortfolio;
 
     modifier _pool_() {
-        require(msg.sender == pool, 'PToken._pool_: only pool');
+        require(msg.sender == pool, 'PToken: only pool');
         _;
     }
 
-    constructor (string memory _name, string memory _symbol, address _pool, uint256 _numSymbols, uint256 _numBTokens) {
-        require(_pool != address(0), 'PToken.constructor: 0 pool address');
+    modifier _existsOwner_(address owner) {
+        require(_exists(owner), 'PToken: nonexistent owner');
+        _;
+    }
+
+    modifier _validSymbolId_(uint256 symbolId) {
+        require(symbolId < numSymbols, 'PToken: invalid symbolId');
+        _;
+    }
+
+    modifier _validBTokenId_(uint256 bTokenId) {
+        require(bTokenId < numBTokens, 'PToken: invalid bTokenId');
+        _;
+    }
+
+    constructor () {
+        pool = msg.sender;
+    }
+
+    function initialize(string memory _name, string memory _symbol, uint256 _numSymbols, uint256 _numBTokens, address _pool) public {
+        require(bytes(name).length == 0 && bytes(symbol).length == 0 && pool == address(0), 'PToken.initialize: already intialized');
         name = _name;
         symbol = _symbol;
-        pool = _pool;
         numSymbols = _numSymbols;
         numBTokens = _numBTokens;
+        pool = _pool;
     }
 
     function setPool(address newPool) public _pool_ {
@@ -71,11 +89,11 @@ contract PToken is ERC721 {
         return _exists(owner);
     }
 
-    function getMargin(address owner, uint256 bTokenId) public view returns (int256) {
+    function getMargin(address owner, uint256 bTokenId) public view _existsOwner_(owner) _validBTokenId_(bTokenId) returns (int256) {
         return _tokenIdPortfolio[_ownerTokenId[owner]].margins[bTokenId];
     }
 
-    function getMargins(address owner) public view returns (int256[] memory) {
+    function getMargins(address owner) public view _existsOwner_(owner) returns (int256[] memory) {
         mapping (uint256 => int256) storage margins = _tokenIdPortfolio[_ownerTokenId[owner]].margins;
         int256[] memory res = new int256[](numBTokens);
         for (uint256 i = 0; i < numBTokens; i++) {
@@ -84,11 +102,11 @@ contract PToken is ERC721 {
         return res;
     }
 
-    function getPosition(address owner, uint256 symbolId) public view returns (Position memory) {
+    function getPosition(address owner, uint256 symbolId) public view _existsOwner_(owner) _validSymbolId_(symbolId) returns (Position memory) {
         return _tokenIdPortfolio[_ownerTokenId[owner]].positions[symbolId];
     }
 
-    function getPositions(address owner) public view returns (Position[] memory) {
+    function getPositions(address owner) public view _existsOwner_(owner) returns (Position[] memory) {
         mapping (uint256 => Position) storage positions = _tokenIdPortfolio[_ownerTokenId[owner]].positions;
         Position[] memory res = new Position[](numSymbols);
         for (uint256 i = 0; i < numSymbols; i++) {
@@ -97,7 +115,7 @@ contract PToken is ERC721 {
         return res;
     }
 
-    function mint(address owner, uint256 bTokenId, uint256 amount) public _pool_ {
+    function mint(address owner, uint256 bTokenId, uint256 amount) public _pool_ _validBTokenId_(bTokenId) {
         require(owner != address(0), 'PToken.mint: to 0 address');
         require(!_exists(owner), 'PToken.mint: to existent owner');
 
@@ -115,22 +133,36 @@ contract PToken is ERC721 {
         emit Transfer(address(0), owner, tokenId);
     }
 
-    function addMargin(address owner, uint256 bTokenId, int256 amount) public _pool_ {
-        require(_exists(owner), 'PToken.addMargin: nonexistent owner');
+    function burn(address owner) public _pool_ _existsOwner_(owner) {
+        uint256 tokenId = _ownerTokenId[owner];
+        Portfolio storage p = _tokenIdPortfolio[tokenId];
+        for (uint256 i = 0; i < numSymbols; i++) {
+            require(p.positions[i].volume == 0, 'PToken.burn: non empty token');
+        }
+
+        totalSupply -= 1;
+
+        delete _ownerTokenId[owner];
+        delete _tokenIdOwner[tokenId];
+        delete _tokenIdPortfolio[tokenId];
+        delete _tokenIdOperator[tokenId];
+
+        emit Transfer(owner, address(0), tokenId);
+    }
+
+    function addMargin(address owner, uint256 bTokenId, int256 amount) public _pool_ _existsOwner_(owner) _validBTokenId_(bTokenId) {
         Portfolio storage p = _tokenIdPortfolio[_ownerTokenId[owner]];
         p.margins[bTokenId] += amount;
         emit UpdateMargin(owner, bTokenId, p.margins[bTokenId]);
     }
 
-    function updateMargin(address owner, uint256 bTokenId, int256 amount) public _pool_ {
-        require(_exists(owner), 'PToken.updateMargin: nonexistent owner');
+    function updateMargin(address owner, uint256 bTokenId, int256 amount) public _pool_ _existsOwner_(owner) _validBTokenId_(bTokenId) {
         Portfolio storage p = _tokenIdPortfolio[_ownerTokenId[owner]];
         p.margins[bTokenId] = amount;
         emit UpdateMargin(owner, bTokenId, amount);
     }
 
-    function updateMargins(address owner, int256[] memory margins) public _pool_ {
-        require(_exists(owner), 'PToken.updateMargins: nonexistent owner');
+    function updateMargins(address owner, int256[] memory margins) public _pool_ _existsOwner_(owner) {
         require(margins.length == numBTokens, 'PToken.updateMargins: invalid margins length');
         Portfolio storage p = _tokenIdPortfolio[_ownerTokenId[owner]];
         for (uint256 i = 0; i < numBTokens; i++) {
@@ -141,8 +173,7 @@ contract PToken is ERC721 {
         }
     }
 
-    function updatePosition(address owner, uint256 symbolId, Position memory position) public _pool_ {
-        require(_exists(owner), 'PToken.updatePosition: nonexistent owner');
+    function updatePosition(address owner, uint256 symbolId, Position memory position) public _pool_ _existsOwner_(owner) _validSymbolId_(symbolId) {
         Portfolio storage p = _tokenIdPortfolio[_ownerTokenId[owner]];
         p.positions[symbolId] = position;
         emit UpdatePosition(owner, symbolId, position.volume, position.cost, position.lastCumuFundingRate);

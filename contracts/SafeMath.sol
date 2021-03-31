@@ -24,19 +24,19 @@ library SafeMath {
 
 
     function rescale(uint256 a, uint256 decimals1, uint256 decimals2) internal pure returns (uint256) {
-        return a * (10 ** decimals2) / (10 ** decimals1);
+        return decimals1 == decimals2 ? a : a * (10 ** decimals2) / (10 ** decimals1);
     }
 
     function rescale(int256 a, uint256 decimals1, uint256 decimals2) internal pure returns (int256) {
-        return a * utoi(10 ** decimals2) / utoi(10 ** decimals1);
+        return decimals1 == decimals2 ? a : a * utoi(10 ** decimals2) / utoi(10 ** decimals1);
     }
 
     function reformat(uint256 a, uint256 decimals) internal pure returns (uint256) {
-        return rescale(rescale(a, 18, decimals), decimals, 18);
+        return decimals == 18 ? a : rescale(rescale(a, 18, decimals), decimals, 18);
     }
 
     function reformat(int256 a, uint256 decimals) internal pure returns (int256) {
-        return rescale(rescale(a, 18, decimals), decimals, 18);
+        return decimals == 18 ? a : rescale(rescale(a, 18, decimals), decimals, 18);
     }
 
 }

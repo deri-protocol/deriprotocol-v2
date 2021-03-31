@@ -28,6 +28,8 @@ interface IPToken {
 
     function numBTokens() external view returns (uint256);
 
+    function initialize(string memory _name, string memory _symbol, uint256 _numSymbols, uint256 _numBTokens, address _pool) external;
+
     function setPool(address newPool) external;
 
     function setNumSymbols(uint256 num) external;
@@ -45,6 +47,8 @@ interface IPToken {
     function getPositions(address owner) external view returns (Position[] memory);
 
     function mint(address owner, uint256 bTokenId, uint256 amount) external;
+
+    function burn(address owner) external;
 
     function addMargin(address owner, uint256 bTokenId, int256 amount) external;
 

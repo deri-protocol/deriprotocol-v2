@@ -10,3 +10,4 @@ node_modules/
 node_modules.rar
 hardhat.config.js
 *Deployments*
+*test*/

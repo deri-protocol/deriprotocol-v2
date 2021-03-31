@@ -12,7 +12,7 @@ contract ERC20 {
 
     string public symbol;
 
-    uint8 public constant deciamls = 18;
+    uint8 public constant decimals = 18;
 
     uint256 public totalSupply;
 

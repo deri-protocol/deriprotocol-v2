@@ -8,16 +8,20 @@ contract LToken is ERC20 {
 
     address public pool;
 
-    uint256 public bTokenId;
-
     modifier _pool_() {
         require(msg.sender == pool, 'LToken._pool_: only pool');
         _;
     }
 
-    constructor (string memory _name, string memory _symbol, address _pool, uint256 _bTokenId) ERC20 (_name, _symbol) {
+    constructor () ERC20('', '') {
+        pool = msg.sender;
+    }
+
+    function initialize(string memory _name, string memory _symbol, address _pool) public {
+        require(bytes(name).length == 0 && bytes(symbol).length == 0 && pool == address(0), 'LToken.initialize: already initialized');
+        name = _name;
+        symbol = _symbol;
         pool = _pool;
-        bTokenId = _bTokenId;
     }
 
     function setPool(address newPool) public _pool_ {

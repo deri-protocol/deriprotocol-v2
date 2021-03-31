@@ -10,6 +10,8 @@ interface ILToken is IERC20 {
 
     function bTokenId() external view returns (uint256);
 
+    function initialize(string memory _name, string memory _symbol, address _pool) external;
+
     function setPool(address newPool) external;
 
     function mint(address account, uint256 amount) external;
