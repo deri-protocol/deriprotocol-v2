@@ -415,9 +415,10 @@ contract PerpetualPool is MigratablePool {
             SymbolInfo storage s = symbols[i];
             int256 price = ISymbolHandler(s.handlerAddress).getPrice().utoi();
 
-            int256 r = totalLiquidity != 0 ? s.tradersNetVolume * price / ONE * s.multiplier / ONE * s.fundingRateCoefficient / totalLiquidity : int256(0);
-            int256 delta;
-            unchecked { delta = r * int256(block.number - lastUpdateBTokenStatusBlock); }
+            int256 r = totalLiquidity != 0
+                ? s.tradersNetVolume * price / ONE * price / ONE * s.multiplier / ONE * s.multiplier / ONE * s.fundingRateCoefficient / totalLiquidity
+                : int256(0);
+            int256 delta = r * int256(block.number - lastUpdateBTokenStatusBlock);
             int256 funding = s.tradersNetVolume * delta / ONE;
             undistributedPnl += funding;
             unchecked { s.cumuFundingRate += delta; }
