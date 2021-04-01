@@ -28,7 +28,7 @@ contract PerpetualPool is MigratablePool {
 
     event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, uint256 price);
 
-    event Liquidate(address indexed account);
+    event Liquidate(address indexed liquidator, address indexed account);
 
     struct SymbolInfo {
         string  symbol;
@@ -216,9 +216,9 @@ contract PerpetualPool is MigratablePool {
         BTokenInfo storage b = bTokens[bTokenId];
         bAmount = _deflationCompatibleSafeTransferFrom(b.bTokenAddress, b.decimals, msg.sender, address(this), bAmount);
 
-        uint256 totalLiquidity = (b.liquidity * b.price / ONE * b.discount / ONE + b.pnl).itou();
+        uint256 totalDynamicEquity = (b.liquidity * b.price / ONE * b.discount / ONE + b.pnl).itou();
         uint256 totalSupply = ILToken(b.lTokenAddress).totalSupply();
-        uint256 lShares = totalLiquidity == 0 ? bAmount : bAmount * (b.price * b.discount / ONE).itou() / UONE * totalSupply / totalLiquidity;
+        uint256 lShares = totalDynamicEquity == 0 ? bAmount : bAmount * (b.price * b.discount / ONE).itou() / UONE * totalSupply / totalDynamicEquity;
 
         ILToken(b.lTokenAddress).mint(msg.sender, lShares);
         b.liquidity += bAmount.utoi();
@@ -263,7 +263,7 @@ contract PerpetualPool is MigratablePool {
 
     function _addMargin(uint256 bTokenId, uint256 bAmount) internal _lock_ {
         require(bTokenId < bTokens.length, 'PerpetualPool.addMargin: invalid bTokenId');
-        _updateBTokenStatus();
+        // _updateBTokenStatus();
 
         BTokenInfo storage b = bTokens[bTokenId];
         bAmount = _deflationCompatibleSafeTransferFrom(b.bTokenAddress, b.decimals, msg.sender, address(this), bAmount);
@@ -389,7 +389,7 @@ contract PerpetualPool is MigratablePool {
         IPToken(pTokenAddress).burn(account);
         IERC20(bTokens[0].bTokenAddress).safeTransfer(msg.sender, reward.itou().rescale(18, bTokens[0].decimals));
 
-        emit Liquidate(account);
+        emit Liquidate(msg.sender, account);
     }
 
 
@@ -400,14 +400,14 @@ contract PerpetualPool is MigratablePool {
     function _updateBTokenStatus() internal {
         if (block.number == lastUpdateBTokenStatusBlock) return;
 
-        int256 totalLiquidity;
-        int256[] memory liquidities = new int256[](bTokens.length);
+        int256 totalDynamicEquity;
+        int256[] memory dynamicEquities = new int256[](bTokens.length);
         for (uint256 i = 0; i < bTokens.length; i++) {
             BTokenInfo storage b = bTokens[i];
             b.price = IBTokenHandler(b.handlerAddress).getPrice().utoi();
-            int256 liquidity = b.liquidity * b.price / ONE * b.discount / ONE + b.pnl;
-            liquidities[i] = liquidity;
-            totalLiquidity += liquidity;
+            int256 dynamicEquity = b.liquidity * b.price / ONE * b.discount / ONE + b.pnl;
+            dynamicEquities[i] = dynamicEquity;
+            totalDynamicEquity += dynamicEquity;
         }
 
         int256 undistributedPnl;
@@ -415,8 +415,8 @@ contract PerpetualPool is MigratablePool {
             SymbolInfo storage s = symbols[i];
             int256 price = ISymbolHandler(s.handlerAddress).getPrice().utoi();
 
-            int256 r = totalLiquidity != 0
-                ? s.tradersNetVolume * price / ONE * price / ONE * s.multiplier / ONE * s.multiplier / ONE * s.fundingRateCoefficient / totalLiquidity
+            int256 r = totalDynamicEquity != 0
+                ? s.tradersNetVolume * price / ONE * price / ONE * s.multiplier / ONE * s.multiplier / ONE * s.fundingRateCoefficient / totalDynamicEquity
                 : int256(0);
             int256 delta = r * int256(block.number - lastUpdateBTokenStatusBlock);
             int256 funding = s.tradersNetVolume * delta / ONE;
@@ -428,9 +428,9 @@ contract PerpetualPool is MigratablePool {
             s.price = price;
         }
 
-        if (totalLiquidity != 0 && undistributedPnl != 0) {
+        if (totalDynamicEquity != 0 && undistributedPnl != 0) {
             for (uint256 i = 0; i < bTokens.length; i++) {
-                bTokens[i].pnl += (undistributedPnl * liquidities[i] / totalLiquidity).reformat(bTokens[i].decimals);
+                bTokens[i].pnl += (undistributedPnl * dynamicEquities[i] / totalDynamicEquity).reformat(bTokens[i].decimals);
             }
         }
 
@@ -453,23 +453,23 @@ contract PerpetualPool is MigratablePool {
         if (unsettledPnl != 0) IPToken(pTokenAddress).addMargin(account, 0, unsettledPnl.reformat(bTokens[0].decimals));
     }
 
-    function _getBTokenLiquidities() internal view returns (int256, int256[] memory) {
-        int256 totalLiquidity;
-        int256[] memory liquidities = new int256[](bTokens.length);
+    function _getBTokenDynamicEquities() internal view returns (int256, int256[] memory) {
+        int256 totalDynamicEquity;
+        int256[] memory dynamicEquities = new int256[](bTokens.length);
         for (uint256 i = 0; i < bTokens.length; i++) {
             BTokenInfo storage b = bTokens[i];
-            int256 liquidity = b.liquidity * b.price / ONE * b.discount / ONE + b.pnl;
-            totalLiquidity += liquidity;
-            liquidities[i] = liquidity;
+            int256 dynamicEquity = b.liquidity * b.price / ONE * b.discount / ONE + b.pnl;
+            totalDynamicEquity += dynamicEquity;
+            dynamicEquities[i] = dynamicEquity;
         }
-        return (totalLiquidity, liquidities);
+        return (totalDynamicEquity, dynamicEquities);
     }
 
     function _distributePnlToBTokens(int256 pnl) internal {
-        (int256 totalLiquidity, int256[] memory liquidities) = _getBTokenLiquidities();
-        if (totalLiquidity != 0 && pnl != 0) {
+        (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities();
+        if (totalDynamicEquity != 0 && pnl != 0) {
             for (uint256 i = 0; i < bTokens.length; i++) {
-                bTokens[i].pnl += (pnl * liquidities[i] / totalLiquidity).reformat(bTokens[i].decimals);
+                bTokens[i].pnl += (pnl * dynamicEquities[i] / totalDynamicEquity).reformat(bTokens[i].decimals);
             }
         }
     }
