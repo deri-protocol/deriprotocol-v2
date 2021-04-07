@@ -35,8 +35,7 @@ interface IPerpetualPool {
         SymbolInfo[] calldata _symbols,
         BTokenInfo[] calldata _bTokens,
         int256[] calldata _parameters,
-        address _pTokenAddress,
-        address _controller
+        address[] calldata _addresses
     ) external;
 
     function symbols() external view returns (SymbolInfo[] memory);

@@ -36,6 +36,12 @@ contract PoolFactory {
 
     address public lTokenTemplate;
 
+    address public daoAddress;
+
+    address public liquidatorQualifierAddress;
+
+    address public poolControllerAddress;
+
     address public createdPerpetualPoolAddress;
 
     modifier _controller_() {
@@ -51,23 +57,31 @@ contract PoolFactory {
         controller = newController;
     }
 
-    function setAddresses(address[4] calldata addresses) public _controller_ {
+    function setAddresses(address[7] calldata addresses) public _controller_ {
         cloneFactory = addresses[0];
         perpetualPoolTemplate = addresses[1];
         pTokenTemplate = addresses[2];
         lTokenTemplate = addresses[3];
+        daoAddress = addresses[4];
+        liquidatorQualifierAddress = addresses[5];
+        poolControllerAddress = addresses[6];
     }
 
     function createPerpetualPool(
         SymbolParams[] calldata _symbols,
         BTokenParams[] calldata _bTokens,
-        int256[] calldata _parameters,
-        address _controller
+        int256[] calldata _parameters
     ) public _controller_ {
         address perpetualPool = ICloneFactory(cloneFactory).clone(perpetualPoolTemplate);
 
         address pToken = ICloneFactory(cloneFactory).clone(pTokenTemplate);
         IPToken(pToken).initialize('DeriV2 Position Token', 'DPT', _symbols.length, _bTokens.length, perpetualPool);
+
+        address[] memory _addresses = new address[](4);
+        _addresses[0] = pToken;
+        _addresses[1] = daoAddress;
+        _addresses[2] = liquidatorQualifierAddress;
+        _addresses[3] = poolControllerAddress;
 
         address[] memory lTokens = new address[](_bTokens.length);
         for (uint256 i = 0; i < _bTokens.length; i++) {
@@ -101,7 +115,7 @@ contract PoolFactory {
             bTokens[i].pnl = 0;
         }
 
-        IPerpetualPool(perpetualPool).initialize(symbols, bTokens, _parameters, pToken, _controller);
+        IPerpetualPool(perpetualPool).initialize(symbols, bTokens, _parameters, _addresses);
 
         createdPerpetualPoolAddress = perpetualPool;
         emit CreatePerpetualPool(createdPerpetualPoolAddress);

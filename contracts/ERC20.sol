@@ -16,9 +16,9 @@ contract ERC20 {
 
     uint256 public totalSupply;
 
-    mapping (address => uint256) public balances;
+    mapping (address => uint256) balances;
 
-    mapping (address => mapping (address => uint256)) public allowances;
+    mapping (address => mapping (address => uint256)) allowances;
 
     constructor (string memory _name, string memory _symbol) {
         name = _name;
@@ -70,6 +70,5 @@ contract ERC20 {
         balances[to] += amount;
         emit Transfer(from, to, amount);
     }
-
 
 }

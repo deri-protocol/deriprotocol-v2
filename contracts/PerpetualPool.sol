@@ -8,6 +8,7 @@ import './interface/ISymbolHandler.sol';
 import './interface/IPToken.sol';
 import './interface/ILToken.sol';
 import './interface/IPerpetualPool.sol';
+import './interface/ILiquidatorQualifier.sol';
 import './SafeMath.sol';
 import './SafeERC20.sol';
 import './MigratablePool.sol';
@@ -56,19 +57,27 @@ contract PerpetualPool is MigratablePool {
     int256  constant ONE  = 10**18;
     uint256 constant UONE = 10**18;
 
-    address public pTokenAddress;
+    int256  private minPoolMarginRatio;
 
-    int256  public minPoolMarginRatio;
+    int256  private minInitialMarginRatio;
 
-    int256  public minInitialMarginRatio;
+    int256  private minMaintenanceMarginRatio;
 
-    int256  public minMaintenanceMarginRatio;
+    int256  private minLiquidationReward;
 
-    int256  public minLiquidationReward;
+    int256  private maxLiquidationReward;
 
-    int256  public maxLiquidationReward;
+    int256  private liquidationCutRatio;
 
-    int256  public liquidationCutRatio;
+    int256  private daoFeeCollectRatio;
+
+    address private pTokenAddress;
+
+    address private liquidatorQualifierAddress;
+
+    address private daoAddress;
+
+    int256  public daoLiquidity;
 
     SymbolInfo[] public symbols;    // symbolId indexed
 
@@ -93,8 +102,7 @@ contract PerpetualPool is MigratablePool {
         SymbolInfo[] calldata _symbols,
         BTokenInfo[] calldata _bTokens,
         int256[] calldata _parameters,
-        address _pTokenAddress,
-        address _controller
+        address[] calldata _addresses
     ) public {
         require(controller == address(0) && symbols.length == 0 && bTokens.length == 0 && pTokenAddress == address(0),
                 'PerpetualPool.initialize: already initialized');
@@ -117,12 +125,62 @@ contract PerpetualPool is MigratablePool {
         minLiquidationReward = _parameters[3];
         maxLiquidationReward = _parameters[4];
         liquidationCutRatio = _parameters[5];
-        pTokenAddress = _pTokenAddress;
-        controller = _controller;
+        daoFeeCollectRatio = _parameters[6];
+
+        pTokenAddress = _addresses[0];
+        daoAddress = _addresses[1];
+        liquidatorQualifierAddress = _addresses[2];
+        controller = _addresses[3];
 
         for (uint256 i = 0; i < bTokens.length; i++) {
             IERC20(bTokens[i].bTokenAddress).safeApprove(bTokens[i].handlerAddress, type(uint256).max);
         }
+    }
+
+    function getParameters() public view returns (int256[7] memory parameters) {
+        parameters[0] = minPoolMarginRatio;
+        parameters[1] = minInitialMarginRatio;
+        parameters[2] = minMaintenanceMarginRatio;
+        parameters[3] = minLiquidationReward;
+        parameters[4] = maxLiquidationReward;
+        parameters[5] = liquidationCutRatio;
+        parameters[6] = daoFeeCollectRatio;
+    }
+
+    function setParameters(int256[7] calldata parameters) public _controller_ {
+        minPoolMarginRatio = parameters[0];
+        minInitialMarginRatio = parameters[1];
+        minMaintenanceMarginRatio = parameters[2];
+        minLiquidationReward = parameters[3];
+        maxLiquidationReward = parameters[4];
+        liquidationCutRatio = parameters[5];
+        daoFeeCollectRatio = parameters[6];
+    }
+
+    function getAddresses() public view returns (address[3] memory addresses) {
+        addresses[0] = pTokenAddress;
+        addresses[1] = liquidatorQualifierAddress;
+        addresses[2] = daoAddress;
+    }
+
+    function setAddresses(address[3] memory addresses) public _controller_ {
+        pTokenAddress = addresses[0];
+        liquidatorQualifierAddress = addresses[1];
+        daoAddress = addresses[2];
+    }
+
+    function addSymbol(SymbolInfo memory info) public _controller_ {
+        require(info.price == 0 && info.cumuFundingRate == 0 && info.tradersNetVolume == 0 && info.tradersNetCost == 0,
+                'PerpetualPool.addSymbol: invalid symbol');
+        symbols.push(info);
+        IPToken(pTokenAddress).setNumSymbols(symbols.length);
+    }
+
+    function addBToken(BTokenInfo memory info) public _controller_ {
+        require(info.price == 0 && info.liquidity == 0 && info.pnl == 0,
+                'PerpetualPool.addBToken: invalid bToken');
+        bTokens.push(info);
+        IPToken(pTokenAddress).setNumBTokens(bTokens.length);
     }
 
 
@@ -146,34 +204,34 @@ contract PerpetualPool is MigratablePool {
 
     // In migration process, this function is to be called from target pool
     function executeMigration(address source) public override _controller_ {
-        uint256 migrationTimestamp = IPerpetualPool(source).migrationTimestamp();
-        address migrationDestination = IPerpetualPool(source).migrationDestination();
-        require(migrationTimestamp != 0 && block.timestamp >= migrationTimestamp, 'PerpetualPool.executeMigration: timestamp not met yet');
-        require(migrationDestination == address(this), 'PerpetualPool.executeMigration: not to destination pool');
+        // uint256 migrationTimestamp = IPerpetualPool(source).migrationTimestamp();
+        // address migrationDestination = IPerpetualPool(source).migrationDestination();
+        // require(migrationTimestamp != 0 && block.timestamp >= migrationTimestamp, 'PerpetualPool.executeMigration: timestamp not met yet');
+        // require(migrationDestination == address(this), 'PerpetualPool.executeMigration: not to destination pool');
 
-        // copy state values for each symbol
-        IPerpetualPool.SymbolInfo[] memory sourceSymbols = IPerpetualPool(source).symbols();
-        for (uint256 i = 0; i < sourceSymbols.length; i++) {
-            require(keccak256(bytes(symbols[i].symbol)) == keccak256(bytes(sourceSymbols[i].symbol)), 'PerpetualPool.executeMigration: symbol not match');
-            symbols[i].price = sourceSymbols[i].price;
-            symbols[i].cumuFundingRate = sourceSymbols[i].cumuFundingRate;
-            symbols[i].tradersNetVolume = sourceSymbols[i].tradersNetVolume;
-            symbols[i].tradersNetCost = sourceSymbols[i].tradersNetCost;
-        }
+        // // copy state values for each symbol
+        // IPerpetualPool.SymbolInfo[] memory sourceSymbols = IPerpetualPool(source).symbols();
+        // for (uint256 i = 0; i < sourceSymbols.length; i++) {
+        //     require(keccak256(bytes(symbols[i].symbol)) == keccak256(bytes(sourceSymbols[i].symbol)), 'PerpetualPool.executeMigration: symbol not match');
+        //     // symbols[i].price = sourceSymbols[i].price;
+        //     symbols[i].cumuFundingRate = sourceSymbols[i].cumuFundingRate;
+        //     symbols[i].tradersNetVolume = sourceSymbols[i].tradersNetVolume;
+        //     symbols[i].tradersNetCost = sourceSymbols[i].tradersNetCost;
+        // }
 
-        // copy state values for each bToken, and transfer bToken to this new pool
-        IPerpetualPool.BTokenInfo[] memory sourceBTokens = IPerpetualPool(source).bTokens();
-        for (uint256 i = 0; i < sourceBTokens.length; i++) {
-            require(bTokens[i].bTokenAddress == sourceBTokens[i].bTokenAddress && bTokens[i].lTokenAddress == sourceBTokens[i].lTokenAddress,
-                    'PerpetualPool.executeMigration: bToken not match');
-            bTokens[i].price = sourceBTokens[i].price;
-            bTokens[i].liquidity = sourceBTokens[i].liquidity;
-            bTokens[i].pnl = sourceBTokens[i].pnl;
+        // // copy state values for each bToken, and transfer bToken to this new pool
+        // IPerpetualPool.BTokenInfo[] memory sourceBTokens = IPerpetualPool(source).bTokens();
+        // for (uint256 i = 0; i < sourceBTokens.length; i++) {
+        //     require(bTokens[i].bTokenAddress == sourceBTokens[i].bTokenAddress && bTokens[i].lTokenAddress == sourceBTokens[i].lTokenAddress,
+        //             'PerpetualPool.executeMigration: bToken not match');
+        //     // bTokens[i].price = sourceBTokens[i].price;
+        //     bTokens[i].liquidity = sourceBTokens[i].liquidity;
+        //     bTokens[i].pnl = sourceBTokens[i].pnl;
 
-            IERC20(sourceBTokens[i].bTokenAddress).safeTransferFrom(source, address(this), IERC20(sourceBTokens[i].bTokenAddress).balanceOf(source));
-        }
+        //     IERC20(sourceBTokens[i].bTokenAddress).safeTransferFrom(source, address(this), IERC20(sourceBTokens[i].bTokenAddress).balanceOf(source));
+        // }
 
-        emit ExecuteMigration(migrationTimestamp, source, address(this));
+        // emit ExecuteMigration(migrationTimestamp, source, address(this));
     }
 
 
@@ -201,6 +259,8 @@ contract PerpetualPool is MigratablePool {
     }
 
     function liquidate(address account) public {
+        require(ILiquidatorQualifier(liquidatorQualifierAddress).isQualifiedLiquidator(msg.sender),
+                'PerpetualPool.liquidate: not qualified liquidator');
         _liquidate(account);
     }
 
@@ -335,7 +395,11 @@ contract PerpetualPool is MigratablePool {
 
         s.tradersNetVolume += tradeVolume;
         s.tradersNetCost += curCost - realizedCost;
-        _distributePnlToBTokens(fee);
+
+        int256 daoFee = fee * daoFeeCollectRatio / ONE;
+        daoLiquidity += daoFee;
+        _distributePnlToBTokens(fee - daoFee);
+        // _distributePnlToBTokens(fee);
 
         int256 dynamicEquity;
         int256 cost;
@@ -347,7 +411,7 @@ contract PerpetualPool is MigratablePool {
         emit Trade(msg.sender, symbolId, tradeVolume, s.price.itou());
     }
 
-    function _liquidate(address account) public {
+    function _liquidate(address account) internal _lock_ {
         _updateBTokenStatus();
         _updateTraderStatus(account);
 
@@ -516,7 +580,6 @@ contract PerpetualPool is MigratablePool {
         return (totalDynamicEquity, totalCost);
     }
 
-    // keeper?
     function _coverBTokenDebt(uint256 bTokenId) internal {
         BTokenInfo storage b = bTokens[bTokenId];
         if (b.pnl < 0) {
