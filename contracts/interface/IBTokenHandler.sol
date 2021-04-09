@@ -6,6 +6,6 @@ interface IBTokenHandler {
 
     function getPrice() external view returns (uint256);
 
-    function swap(uint256 amount1, uint256 amount2) external returns (uint256, uint256);
+    function swap(uint256 maxAmountIn, uint256 minAmountOut) external returns (uint256, uint256);
 
 }

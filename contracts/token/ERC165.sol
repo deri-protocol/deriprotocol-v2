@@ -2,13 +2,15 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
+import '../interface/IERC165.sol';
+
 /**
  * @dev Implementation of the {IERC165} interface.
  *
  * Contracts may inherit from this and call {_registerInterface} to declare
  * their support of an interface.
  */
-abstract contract ERC165 {
+abstract contract ERC165 is IERC165 {
     /*
      * bytes4(keccak256('supportsInterface(bytes4)')) == 0x01ffc9a7
      */
@@ -30,7 +32,7 @@ abstract contract ERC165 {
      *
      * Time complexity O(1), guaranteed to always use less than 30 000 gas.
      */
-    function supportsInterface(bytes4 interfaceId) public view returns (bool) {
+    function supportsInterface(bytes4 interfaceId) public override view returns (bool) {
         return _supportedInterfaces[interfaceId];
     }
 

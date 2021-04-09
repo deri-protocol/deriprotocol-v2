@@ -2,7 +2,9 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-interface IPerpetualPool {
+import './IMigratablePool.sol';
+
+interface IPerpetualPool is IMigratablePool {
 
     struct SymbolInfo {
         string  symbol;
@@ -27,19 +29,74 @@ interface IPerpetualPool {
         int256  pnl;
     }
 
-    function migrationTimestamp() external view returns (uint256);
+    event AddLiquidity(address indexed account, uint256 indexed bTokenId, uint256 lShares, uint256 bAmount);
 
-    function migrationDestination() external view returns (address);
+    event RemoveLiquidity(address indexed account, uint256 indexed bTokenId, uint256 lShares, uint256 amount1, uint256 amount2);
 
-    function initialize(
-        SymbolInfo[] calldata _symbols,
-        BTokenInfo[] calldata _bTokens,
-        int256[] calldata _parameters,
-        address[] calldata _addresses
-    ) external;
+    event AddMargin(address indexed account, uint256 indexed bTokenId, uint256 bAmount);
+
+    event RemoveMargin(address indexed account, uint256 indexed bTokenId, uint256 bAmount);
+
+    event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, uint256 price);
+
+    event Liquidate(address indexed liquidator, address indexed account);
+
+    function initialize(int256[] memory parameters_, address[] memory addresses_) external;
+
+    function parameters() external view returns (
+        int256 minPoolMarginRatio,
+        int256 minInitialMarginRatio,
+        int256 minMaintenanceMarginRatio,
+        int256 minLiquidationReward,
+        int256 maxLiquidationReward,
+        int256 liquidationCutRatio,
+        int256 daoFeeCollectRatio
+    );
+
+    function addresses() external view returns (
+        address pTokenAddress,
+        address liquidatorQualifierAddress,
+        address daoAddress
+    );
 
     function symbols() external view returns (SymbolInfo[] memory);
 
     function bTokens() external view returns (BTokenInfo[] memory);
+
+    function setParameters(
+        int256 minPoolMarginRatio,
+        int256 minInitialMarginRatio,
+        int256 minMaintenanceMarginRatio,
+        int256 minLiquidationReward,
+        int256 maxLiquidationReward,
+        int256 liquidationCutRatio,
+        int256 daoFeeCollectRatio
+    ) external;
+
+    function setAddresses(
+        address pTokenAddress,
+        address liquidatorQualifierAddress,
+        address daoAddress
+    ) external;
+
+    function setSymbolParameters(uint256 symbolId, address handlerAddress, int256 feeRatio, int256 fundingRateCoefficient) external;
+
+    function setBTokenParameters(uint256 bTokenId, address handlerAddress, int256 discount) external;
+
+    function addSymbol(SymbolInfo memory info) external;
+
+    function addBToken(BTokenInfo memory info) external;
+
+    function addLiquidity(uint256 bTokenId, uint256 bAmount) external;
+
+    function removeLiquidity(uint256 bTokenId, uint256 lShares) external;
+
+    function addMargin(uint256 bTokenId, uint256 bAmount) external;
+
+    function removeMargin(uint256 bTokenId, uint256 bAmount) external;
+
+    function trade(uint256 symbolId, int256 tradeVolume) external;
+
+    function liquidate(address account) external;
 
 }

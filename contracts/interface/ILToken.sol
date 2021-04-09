@@ -6,11 +6,9 @@ import './IERC20.sol';
 
 interface ILToken is IERC20 {
 
-    function pool() external view returns (address);
-
-    function bTokenId() external view returns (uint256);
-
     function initialize(string memory _name, string memory _symbol, address _pool) external;
+
+    function pool() external view returns (address);
 
     function setPool(address newPool) external;
 

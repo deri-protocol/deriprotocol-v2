@@ -8,13 +8,15 @@ interface IMigratablePool {
 
     event ExecuteMigration(uint256 migrationTimestamp, address source, address target);
 
-    function controller() external view returns (address);
-
     function migrationTimestamp() external view returns (uint256);
 
     function migrationDestination() external view returns (address);
 
-    function setController(address newController) external;
+    function controller() external view returns (address);
+
+    function setNewController(address newController_) external;
+
+    function claimNewController() external;
 
     function prepareMigration(address newPool, uint256 graceDays) external;
 

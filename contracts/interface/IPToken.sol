@@ -2,17 +2,26 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-interface IPToken {
+import './IERC721.sol';
 
-    event UpdateMargin(address indexed owner, uint256 indexed bTokenId, int256 amount);
-
-    event UpdatePosition(address indexed owner, uint256 indexed symbolId, int256 volume, int256 cost, int256 lastCumuFundingRate);
+interface IPToken is IERC721 {
 
     struct Position {
         int256 volume;
         int256 cost;
         int256 lastCumuFundingRate;
     }
+
+    struct Portfolio {
+        mapping (uint256 => Position) positions;    // symbolId indexed
+        mapping (uint256 => int256) margins;        // bTokenId indexed
+    }
+
+    event UpdateMargin(address indexed owner, uint256 indexed bTokenId, int256 amount);
+
+    event UpdatePosition(address indexed owner, uint256 indexed symbolId, int256 volume, int256 cost, int256 lastCumuFundingRate);
+
+    function initialize(string memory _name, string memory _symbol, uint256 _numSymbols, uint256 _numBTokens, address _pool) external;
 
     function name() external view returns (string memory);
 
@@ -27,8 +36,6 @@ interface IPToken {
     function numSymbols() external view returns (uint256);
 
     function numBTokens() external view returns (uint256);
-
-    function initialize(string memory _name, string memory _symbol, uint256 _numSymbols, uint256 _numBTokens, address _pool) external;
 
     function setPool(address newPool) external;
 

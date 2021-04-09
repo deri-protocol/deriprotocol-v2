@@ -51,18 +51,22 @@ async function deployBTokens() {
     // USDT
     let usdt = await TestTetherToken.deploy('Test Tether USDT', 'USDT');
     await logTransaction('USDT', usdt.deployTransaction);
+    await logTransaction('Mint', await usdt.mint(deployer.address, rescale(100000000, 0, 6)));
 
     // AAA
     let aaa = await TERC20.deploy('Test ERC20 AAA', 'AAA', 18);
     await logTransaction('AAA', aaa.deployTransaction);
+    await logTransaction('Mint', await aaa.mint(deployer.address, rescale(1000000, 0, 18)));
 
     // BBB
     let bbb = await TERC20.deploy('Test ERC20 BBB', 'BBB', 18);
     await logTransaction('BBB', bbb.deployTransaction);
+    await logTransaction('Mint', await bbb.mint(deployer.address, rescale(1000000, 0, 18)));
 
     // CCC
     let ccc = await TERC20.deploy('Test ERC20 CCC', 'CCC', 18);
     await logTransaction('CCC', ccc.deployTransaction);
+    await logTransaction('Mint', await ccc.mint(deployer.address, rescale(10000000, 0, 18)));
 }
 
 async function main() {
