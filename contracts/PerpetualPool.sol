@@ -79,11 +79,11 @@ contract PerpetualPool is MigratablePool {
 
     int256  public daoLiquidity;
 
+    uint256 lastUpdateBTokenStatusBlock;
+
     SymbolInfo[] public symbols;    // symbolId indexed
 
     BTokenInfo[] public bTokens;    // bTokenId indexed
-
-    uint256 lastUpdateBTokenStatusBlock;
 
     bool private _mutex;
 
@@ -99,25 +99,11 @@ contract PerpetualPool is MigratablePool {
     }
 
     function initialize(
-        SymbolInfo[] calldata _symbols,
-        BTokenInfo[] calldata _bTokens,
         int256[] calldata _parameters,
         address[] calldata _addresses
     ) public {
-        require(controller == address(0) && symbols.length == 0 && bTokens.length == 0 && pTokenAddress == address(0),
+        require(controller == address(0) && symbols.length == 0 && bTokens.length == 0,
                 'PerpetualPool.initialize: already initialized');
-
-        for (uint256 i = 0; i < _symbols.length; i++) {
-            require(_symbols[i].price == 0 && _symbols[i].cumuFundingRate == 0 && _symbols[i].tradersNetVolume == 0 && _symbols[i].tradersNetCost == 0,
-                    'PerpetualPool.initialize: invalid initial symbols');
-            symbols.push(_symbols[i]);
-        }
-
-        for (uint256 i = 0; i < _bTokens.length; i++) {
-            require(_bTokens[i].price == 0 && _bTokens[i].liquidity == 0 && _bTokens[i].pnl == 0,
-                    'PerpetualPool.initialize: invalid initial bTokens');
-            bTokens.push(_bTokens[i]);
-        }
 
         minPoolMarginRatio = _parameters[0];
         minInitialMarginRatio = _parameters[1];
@@ -128,13 +114,9 @@ contract PerpetualPool is MigratablePool {
         daoFeeCollectRatio = _parameters[6];
 
         pTokenAddress = _addresses[0];
-        daoAddress = _addresses[1];
-        liquidatorQualifierAddress = _addresses[2];
+        liquidatorQualifierAddress = _addresses[1];
+        daoAddress = _addresses[2];
         controller = _addresses[3];
-
-        for (uint256 i = 0; i < bTokens.length; i++) {
-            IERC20(bTokens[i].bTokenAddress).safeApprove(bTokens[i].handlerAddress, type(uint256).max);
-        }
     }
 
     function getParameters() public view returns (int256[7] memory parameters) {
@@ -147,7 +129,13 @@ contract PerpetualPool is MigratablePool {
         parameters[6] = daoFeeCollectRatio;
     }
 
-    function setParameters(int256[7] calldata parameters) public _controller_ {
+    function getAddresses() public view returns (address[3] memory addresses) {
+        addresses[0] = pTokenAddress;
+        addresses[1] = liquidatorQualifierAddress;
+        addresses[2] = daoAddress;
+    }
+
+    function setParameters(int256[7] memory parameters) public _controller_ {
         minPoolMarginRatio = parameters[0];
         minInitialMarginRatio = parameters[1];
         minMaintenanceMarginRatio = parameters[2];
@@ -157,16 +145,25 @@ contract PerpetualPool is MigratablePool {
         daoFeeCollectRatio = parameters[6];
     }
 
-    function getAddresses() public view returns (address[3] memory addresses) {
-        addresses[0] = pTokenAddress;
-        addresses[1] = liquidatorQualifierAddress;
-        addresses[2] = daoAddress;
-    }
-
     function setAddresses(address[3] memory addresses) public _controller_ {
         pTokenAddress = addresses[0];
         liquidatorQualifierAddress = addresses[1];
         daoAddress = addresses[2];
+    }
+
+    function setSymbolParameters(uint256 symbolId, address handlerAddress, int256 feeRatio, int256 fundingRateCoefficient) public _controller_ {
+        require(symbolId < symbols.length, 'PerpetualPool.setSymbolParameters: invalid symbolId');
+        SymbolInfo storage s = symbols[symbolId];
+        s.handlerAddress = handlerAddress;
+        s.feeRatio = feeRatio;
+        s.fundingRateCoefficient = fundingRateCoefficient;
+    }
+
+    function setBTokenParameters(uint256 bTokenId, address handlerAddress, int256 discount) public _controller_ {
+        require(bTokenId < bTokens.length, 'PerpetualPool.setBTokenParameters: invalid bTokenId');
+        BTokenInfo storage b = bTokens[bTokenId];
+        b.handlerAddress = handlerAddress;
+        b.discount = discount;
     }
 
     function addSymbol(SymbolInfo memory info) public _controller_ {
@@ -181,6 +178,7 @@ contract PerpetualPool is MigratablePool {
                 'PerpetualPool.addBToken: invalid bToken');
         bTokens.push(info);
         IPToken(pTokenAddress).setNumBTokens(bTokens.length);
+        IERC20(info.bTokenAddress).safeApprove(info.handlerAddress, type(uint256).max);
     }
 
 
@@ -192,14 +190,12 @@ contract PerpetualPool is MigratablePool {
     function approveMigration() public override _controller_ {
         require(migrationTimestamp != 0 && block.timestamp >= migrationTimestamp, 'PerpetualPool.approveMigration: timestamp not met yet');
         // approve new pool to pull all base tokens from this pool
+        // set pToken/lToken to new pool, after redirecting pToken/lToken to new pool, this pool will stop functioning
         for (uint256 i = 0; i < bTokens.length; i++) {
             IERC20(bTokens[i].bTokenAddress).safeApprove(migrationDestination, type(uint256).max);
-        }
-        // set pToken/lToken to new pool, after redirecting pToken/lToken to new pool, this pool will stop functioning
-        IPToken(pTokenAddress).setPool(migrationDestination);
-        for (uint256 i = 0; i < bTokens.length; i++) {
             ILToken(bTokens[i].lTokenAddress).setPool(migrationDestination);
         }
+        IPToken(pTokenAddress).setPool(migrationDestination);
     }
 
     // In migration process, this function is to be called from target pool
@@ -259,7 +255,7 @@ contract PerpetualPool is MigratablePool {
     }
 
     function liquidate(address account) public {
-        require(ILiquidatorQualifier(liquidatorQualifierAddress).isQualifiedLiquidator(msg.sender),
+        require(liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(liquidatorQualifierAddress).isQualifiedLiquidator(msg.sender),
                 'PerpetualPool.liquidate: not qualified liquidator');
         _liquidate(account);
     }
