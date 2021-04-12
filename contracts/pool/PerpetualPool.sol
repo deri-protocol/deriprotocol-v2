@@ -224,9 +224,14 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
     function addBToken(BTokenInfo memory info) public override _controller_ {
         require(info.price == 0 && info.liquidity == 0 && info.pnl == 0,
                 'PerpetualPool.addBToken: invalid bToken');
+        if (_bTokens.length == 0) {
+            info.price = 10**18;
+            info.handlerAddress = address(0);
+        } else {
+            IERC20(info.bTokenAddress).safeApprove(info.handlerAddress, type(uint256).max);
+        }
         _bTokens.push(info);
         IPToken(_pTokenAddress).setNumBTokens(_bTokens.length);
-        IERC20(info.bTokenAddress).safeApprove(info.handlerAddress, type(uint256).max);
     }
 
 
@@ -463,7 +468,7 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
         int256[] memory dynamicEquities = new int256[](_bTokens.length);
         for (uint256 i = 0; i < _bTokens.length; i++) {
             BTokenInfo storage b = _bTokens[i];
-            b.price = IBTokenHandler(b.handlerAddress).getPrice().utoi();
+            if (i != 0) b.price = IBTokenHandler(b.handlerAddress).getPrice().utoi();
             int256 dynamicEquity = b.liquidity * b.price / ONE * b.discount / ONE + b.pnl;
             dynamicEquities[i] = dynamicEquity;
             totalDynamicEquity += dynamicEquity;
@@ -578,7 +583,14 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
     function _coverBTokenDebt(uint256 bTokenId) internal {
         BTokenInfo storage b = _bTokens[bTokenId];
         if (b.pnl < 0) {
-            (uint256 amount1, uint256 amount2) = IBTokenHandler(b.handlerAddress).swap(b.liquidity.itou(), (-b.pnl).itou());
+            uint256 amount1;
+            uint256 amount2;
+            if (bTokenId != 0) {
+                (amount1, amount2) = IBTokenHandler(b.handlerAddress).swap(b.liquidity.itou(), (-b.pnl).itou());
+            } else {
+                amount1 = (-b.pnl).itou();
+                amount2 = amount1;
+            }
             b.liquidity -= amount1.utoi();
             b.pnl += amount2.utoi();
         }
