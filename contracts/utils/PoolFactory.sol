@@ -3,7 +3,6 @@
 pragma solidity >=0.8.0 <0.9.0;
 
 import '../interface/IERC20.sol';
-import '../interface/ICloneFactory.sol';
 import '../interface/IPerpetualPool.sol';
 import '../interface/IPToken.sol';
 import '../interface/ILToken.sol';
@@ -25,7 +24,6 @@ contract PoolFactory {
     }
 
     struct Addresses {
-        address cloneFactory;
         address perpetualPoolTemplate;
         address pTokenTemplate;
         address lTokenTemplate;
@@ -34,50 +32,67 @@ contract PoolFactory {
         address poolController;
     }
 
-    event CreatePerpetualPool(address perpetualPoolAddress);
+    event Clone(address source, address target);
 
-    address public controller;
+    event CreatePerpetualPool(address perpetualPool);
 
-    address public createdPerpetualPool;
-
-    modifier _controller_() {
-        require(msg.sender == controller, 'PoolFactory: only controller');
-        _;
-    }
+    address _controller;
 
     constructor () {
-        controller = msg.sender;
+        _controller = msg.sender;
     }
 
-    function setController(address newController) public _controller_ {
-        controller = newController;
+    function controller() public view returns (address) {
+        return _controller;
+    }
+
+    function setController(address newController) public {
+        require(msg.sender == _controller, 'PoolFactory.setController: only controller');
+        _controller = newController;
+    }
+
+    function clone(address source) public returns (address target) {
+        require(msg.sender == _controller, 'PoolFactory.clone: only controller');
+        bytes20 sourceBytes = bytes20(source);
+        assembly {
+            let c := mload(0x40)
+            mstore(c, 0x3d602d80600a3d3981f3363d3d373d3d3d363d73000000000000000000000000)
+            mstore(add(c, 0x14), sourceBytes)
+            mstore(add(c, 0x28), 0x5af43d82803e903d91602b57fd5bf30000000000000000000000000000000000)
+            target := create(0, c, 0x37)
+        }
+        emit Clone(source, target);
     }
 
     function createPerpetualPool(
         Addresses memory addresses,
         Symbol[] memory symbols,
         BToken[] memory bTokens,
-        int256[] memory parameters
-    ) public _controller_ {
-        address perpetualPool = ICloneFactory(addresses.cloneFactory).clone(addresses.perpetualPoolTemplate);
+        int256[7] memory parameters
+    ) public {
+        require(msg.sender == _controller, 'PoolFactory.createPerpetualPool: only controller');
 
-        address pToken = ICloneFactory(addresses.cloneFactory).clone(addresses.pTokenTemplate);
+        // clone perpetualPool
+        address perpetualPool = clone(addresses.perpetualPoolTemplate);
+
+        // clone pToken and initialize
+        address pToken = clone(addresses.pTokenTemplate);
         IPToken(pToken).initialize('DeriV2 Position Token', 'DPT', 0, 0, perpetualPool);
 
-        address[] memory _addresses = new address[](4);
-        _addresses[0] = pToken;
-        _addresses[1] = addresses.liquidatorQualifier;
-        _addresses[2] = addresses.dao;
-        _addresses[3] = addresses.poolController;
+        // initialize perpetualPool
+        address[4] memory poolAddresses = [
+            pToken,
+            addresses.liquidatorQualifier,
+            addresses.dao,
+            address(this)
+        ];
+        IPerpetualPool(perpetualPool).initialize(parameters, poolAddresses);
 
-        address poolController = addresses.poolController;
-        addresses.poolController = address(this);
-        IPerpetualPool(perpetualPool).initialize(parameters, _addresses);
-
+        // add bTokens
         for (uint256 i = 0; i < bTokens.length; i++) {
             IPerpetualPool.BTokenInfo memory b;
 
-            address lToken = ICloneFactory(addresses.cloneFactory).clone(addresses.lTokenTemplate);
+            address lToken = clone(addresses.lTokenTemplate);
             ILToken(lToken).initialize('DeriV2 Liquidity Token', 'DLT', perpetualPool);
 
             b.bTokenAddress = bTokens[i].bTokenAddress;
@@ -92,6 +107,7 @@ contract PoolFactory {
             IPerpetualPool(perpetualPool).addBToken(b);
         }
 
+        // add symbols
         for (uint256 i = 0; i < symbols.length; i++) {
             IPerpetualPool.SymbolInfo memory s;
 
@@ -108,9 +124,8 @@ contract PoolFactory {
             IPerpetualPool(perpetualPool).addSymbol(s);
         }
 
-        IPerpetualPool(perpetualPool).setNewController(poolController);
+        IPerpetualPool(perpetualPool).setNewController(addresses.poolController);
 
-        createdPerpetualPool = perpetualPool;
         emit CreatePerpetualPool(perpetualPool);
     }
 

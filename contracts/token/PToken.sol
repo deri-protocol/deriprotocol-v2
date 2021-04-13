@@ -141,9 +141,10 @@ contract PToken is IPToken, ERC721 {
         _ownerTokenId[owner] = tokenId;
         _tokenIdOwner[tokenId] = owner;
         Portfolio storage p = _tokenIdPortfolio[tokenId];
-        p.margins[bTokenId] = _utoi(amount);
+        int256 _amount = _utoi(amount);
+        p.margins[bTokenId] = _amount;
 
-        emit UpdateMargin(owner, bTokenId, p.margins[bTokenId]);
+        emit UpdateMargin(owner, bTokenId, _amount);
         emit Transfer(address(0), owner, tokenId);
     }
 

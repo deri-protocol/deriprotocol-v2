@@ -59,13 +59,23 @@ contract BTokenHandlerWETHUSDT {
         address[] memory path = new address[](2);
         path[0] = weth;
         path[1] = usdt;
-        IUniswapV2Router02(uniswapRouter).swapTokensForExactTokens(
-            minAmountOut.rescale(18, decimals1),
-            balance01,
-            path,
-            address(this),
-            block.timestamp + 3600
-        );
+        if (minAmountOut == type(uint256).max) {
+            IUniswapV2Router02(uniswapRouter).swapExactTokensForTokens(
+                balance01,
+                0,
+                path,
+                address(this),
+                block.timestamp + 3600
+            );
+        } else {
+            IUniswapV2Router02(uniswapRouter).swapTokensForExactTokens(
+                minAmountOut.rescale(18, decimals1),
+                balance01,
+                path,
+                address(this),
+                block.timestamp + 3600
+            );
+        }
 
         uint256 balance02 = IERC20(weth).balanceOf(address(this));
         uint256 balance12 = IERC20(usdt).balanceOf(address(this));

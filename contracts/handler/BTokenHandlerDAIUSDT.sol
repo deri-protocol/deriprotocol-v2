@@ -96,13 +96,23 @@ contract BTokenHandlerDAIUSDT {
         path[0] = dai;
         path[1] = weth;
         path[2] = usdt;
-        IUniswapV2Router02(uniswapRouter).swapTokensForExactTokens(
-            minAmountOut.rescale(18, decimals11),
-            balance01,
-            path,
-            address(this),
-            block.timestamp + 3600
-        );
+        if (minAmountOut == type(uint256).max) {
+            IUniswapV2Router02(uniswapRouter).swapExactTokensForTokens(
+                balance01,
+                0,
+                path,
+                address(this),
+                block.timestamp + 3600
+            );
+        } else {
+            IUniswapV2Router02(uniswapRouter).swapTokensForExactTokens(
+                minAmountOut.rescale(18, decimals11),
+                balance01,
+                path,
+                address(this),
+                block.timestamp + 3600
+            );
+        }
 
         uint256 balance02 = IERC20(dai).balanceOf(address(this));
         uint256 balance12 = IERC20(usdt).balanceOf(address(this));

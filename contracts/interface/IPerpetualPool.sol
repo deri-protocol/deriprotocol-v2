@@ -41,9 +41,9 @@ interface IPerpetualPool is IMigratablePool {
 
     event Liquidate(address indexed liquidator, address indexed account);
 
-    function initialize(int256[] memory parameters_, address[] memory addresses_) external;
+    function initialize(int256[7] memory parameters_, address[4] memory addresses_) external;
 
-    function parameters() external view returns (
+    function getParameters() external view returns (
         int256 minPoolMarginRatio,
         int256 minInitialMarginRatio,
         int256 minMaintenanceMarginRatio,
@@ -53,15 +53,15 @@ interface IPerpetualPool is IMigratablePool {
         int256 daoFeeCollectRatio
     );
 
-    function addresses() external view returns (
+    function getAddresses() external view returns (
         address pTokenAddress,
         address liquidatorQualifierAddress,
         address daoAddress
     );
 
-    function symbols() external view returns (SymbolInfo[] memory);
+    function getSymbol(uint256 symbolId) external view returns (SymbolInfo memory);
 
-    function bTokens() external view returns (BTokenInfo[] memory);
+    function getBToken(uint256 bTokenId) external view returns (BTokenInfo memory);
 
     function setParameters(
         int256 minPoolMarginRatio,
