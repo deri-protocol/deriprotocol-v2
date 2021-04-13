@@ -28,16 +28,16 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
     int256  private _minLiquidationReward;
     int256  private _maxLiquidationReward;
     int256  private _liquidationCutRatio;
-    int256  private _daoFeeCollectRatio;
+    int256  private _protocolFeeCollectRatio;
 
     address private _pTokenAddress;
     address private _liquidatorQualifierAddress;
-    address private _daoAddress;
+    address private _protocolAddress;
 
     SymbolInfo[] private _symbols;    // symbolId indexed
     BTokenInfo[] private _bTokens;    // bTokenId indexed
 
-    int256  private _daoLiquidity;
+    int256  private _protocolLiquidity;
     uint256 private _lastUpdateBTokenStatusBlock;
 
     bool private _mutex;
@@ -117,11 +117,11 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
         _minLiquidationReward = parameters_[3];
         _maxLiquidationReward = parameters_[4];
         _liquidationCutRatio = parameters_[5];
-        _daoFeeCollectRatio = parameters_[6];
+        _protocolFeeCollectRatio = parameters_[6];
 
         _pTokenAddress = addresses_[0];
         _liquidatorQualifierAddress = addresses_[1];
-        _daoAddress = addresses_[2];
+        _protocolAddress = addresses_[2];
         _controller = addresses_[3];
     }
 
@@ -132,7 +132,7 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
         int256 minLiquidationReward,
         int256 maxLiquidationReward,
         int256 liquidationCutRatio,
-        int256 daoFeeCollectRatio
+        int256 protocolFeeCollectRatio
     ) {
         minPoolMarginRatio = _minPoolMarginRatio;
         minInitialMarginRatio = _minInitialMarginRatio;
@@ -140,17 +140,17 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
         minLiquidationReward = _minLiquidationReward;
         maxLiquidationReward = _maxLiquidationReward;
         liquidationCutRatio = _liquidationCutRatio;
-        daoFeeCollectRatio = _daoFeeCollectRatio;
+        protocolFeeCollectRatio = _protocolFeeCollectRatio;
     }
 
     function getAddresses() public override view returns (
         address pTokenAddress,
         address liquidatorQualifierAddress,
-        address daoAddress
+        address protocolAddress
     ) {
         pTokenAddress = _pTokenAddress;
         liquidatorQualifierAddress = _liquidatorQualifierAddress;
-        daoAddress = _daoAddress;
+        protocolAddress = _protocolAddress;
     }
 
     function getSymbol(uint256 symbolId) public override view returns (SymbolInfo memory) {
@@ -170,7 +170,7 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
         int256 minLiquidationReward,
         int256 maxLiquidationReward,
         int256 liquidationCutRatio,
-        int256 daoFeeCollectRatio
+        int256 protocolFeeCollectRatio
     ) public override _controller_ {
         _minPoolMarginRatio = minPoolMarginRatio;
         _minInitialMarginRatio = minInitialMarginRatio;
@@ -178,17 +178,17 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
         _minLiquidationReward = minLiquidationReward;
         _maxLiquidationReward = maxLiquidationReward;
         _liquidationCutRatio = liquidationCutRatio;
-        _daoFeeCollectRatio = daoFeeCollectRatio;
+        _protocolFeeCollectRatio = protocolFeeCollectRatio;
     }
 
     function setAddresses(
         address pTokenAddress,
         address liquidatorQualifierAddress,
-        address daoAddress
+        address protocolAddress
     ) public override _controller_ {
         _pTokenAddress = pTokenAddress;
         _liquidatorQualifierAddress = liquidatorQualifierAddress;
-        _daoAddress = daoAddress;
+        _protocolAddress = protocolAddress;
     }
 
     function setSymbolParameters(uint256 symbolId, address handlerAddress, int256 feeRatio, int256 fundingRateCoefficient) public override _controller_ {
@@ -216,11 +216,7 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
     function addBToken(BTokenInfo memory info) public override _controller_ {
         require(info.price == 0 && info.liquidity == 0 && info.pnl == 0,
                 'PerpetualPool.addBToken: invalid bToken');
-        if (_bTokens.length == 0) {
-            info.handlerAddress = address(0);
-            info.discount = 10**18;
-            info.price = 10**18;
-        } else {
+        if (_bTokens.length > 0) {
             IERC20(info.bTokenAddress).safeApprove(info.handlerAddress, type(uint256).max);
         }
         _bTokens.push(info);
@@ -275,8 +271,7 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
         require(IPToken(_pTokenAddress).exists(account), 'PerpetualPool.liquidate: trader not exist');
         _updateBTokenStatus();
         _settleTraderFundingFee(account);
-        int256 marginRatio = _getTraderMarginRatio(account);
-        require(marginRatio < _minMaintenanceMarginRatio, 'PerpetualPool.liquidate: cannot liquidate');
+        require(_getTraderMarginRatio(account) < _minMaintenanceMarginRatio, 'PerpetualPool.liquidate: cannot liquidate');
         _liquidate(account);
     }
 
@@ -291,12 +286,11 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
 
         // gas saving
         address lTokenAddress = b.lTokenAddress;
-        int256 discount = b.discount;
         int256 price = b.price;
 
-        uint256 totalDynamicEquity = (b.liquidity * price / ONE * discount / ONE + b.pnl).itou();
+        uint256 totalDynamicEquity = (b.liquidity * price / ONE + b.pnl).itou();
         uint256 totalSupply = ILToken(lTokenAddress).totalSupply();
-        uint256 lShares = totalDynamicEquity == 0 ? bAmount : bAmount * (price * discount / ONE).itou() / UONE * totalSupply / totalDynamicEquity;
+        uint256 lShares = totalDynamicEquity == 0 ? bAmount : bAmount * price.itou() / UONE * totalSupply / totalDynamicEquity;
 
         ILToken(lTokenAddress).mint(account, lShares);
         b.liquidity += bAmount.utoi();
@@ -415,10 +409,10 @@ contract PerpetualPool is IPerpetualPool, MigratablePool {
         s.tradersNetVolume += tradeVolume;
         s.tradersNetCost += curCost - realizedCost;
 
-        int256 daoFee = fee * _daoFeeCollectRatio / ONE;
-        _daoLiquidity += daoFee;
+        int256 protocolFee = fee * _protocolFeeCollectRatio / ONE;
+        _protocolLiquidity += protocolFee;
         (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities();
-        _distributePnlToBTokens(fee - daoFee, totalDynamicEquity, dynamicEquities);
+        _distributePnlToBTokens(fee - protocolFee, totalDynamicEquity, dynamicEquities);
 
         int256 marginRatio;
         marginRatio = _getPoolMarginRatio();

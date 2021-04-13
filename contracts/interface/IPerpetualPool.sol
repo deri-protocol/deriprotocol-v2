@@ -50,13 +50,13 @@ interface IPerpetualPool is IMigratablePool {
         int256 minLiquidationReward,
         int256 maxLiquidationReward,
         int256 liquidationCutRatio,
-        int256 daoFeeCollectRatio
+        int256 protocolFeeCollectRatio
     );
 
     function getAddresses() external view returns (
         address pTokenAddress,
         address liquidatorQualifierAddress,
-        address daoAddress
+        address protocolAddress
     );
 
     function getSymbol(uint256 symbolId) external view returns (SymbolInfo memory);
@@ -70,13 +70,13 @@ interface IPerpetualPool is IMigratablePool {
         int256 minLiquidationReward,
         int256 maxLiquidationReward,
         int256 liquidationCutRatio,
-        int256 daoFeeCollectRatio
+        int256 protocolFeeCollectRatio
     ) external;
 
     function setAddresses(
         address pTokenAddress,
         address liquidatorQualifierAddress,
-        address daoAddress
+        address protocolAddress
     ) external;
 
     function setSymbolParameters(uint256 symbolId, address handlerAddress, int256 feeRatio, int256 fundingRateCoefficient) external;
