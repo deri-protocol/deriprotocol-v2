@@ -2,9 +2,20 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-import './IMigratablePool.sol';
+import './IMigratable.sol';
 
-interface IPerpetualPool is IMigratablePool {
+interface IPerpetualPool is IMigratable {
+
+    struct BTokenInfo {
+        address bTokenAddress;
+        address handlerAddress;
+        uint256 decimals;
+        int256  discount;
+        int256  price;
+        int256  liquidity;
+        int256  pnl;
+        int256  cumulativePnl;
+    }
 
     struct SymbolInfo {
         string  symbol;
@@ -13,75 +24,34 @@ interface IPerpetualPool is IMigratablePool {
         int256  feeRatio;
         int256  fundingRateCoefficient;
         int256  price;
-        int256  cumuFundingRate;
+        int256  cumulativeFundingRate;
         int256  tradersNetVolume;
         int256  tradersNetCost;
     }
 
-    struct BTokenInfo {
-        address bTokenAddress;
-        address lTokenAddress;
-        address handlerAddress;
-        uint256 decimals;
-        int256  discount;
-        int256  price;
-        int256  liquidity;
-        int256  pnl;
-    }
+    event AddLiquidity(address owner, uint256 bTokenId, uint256 bAmount);
 
-    event AddLiquidity(address indexed account, uint256 indexed bTokenId, uint256 lShares, uint256 bAmount);
+    event RemoveLiquidity(address owner, uint256 bTokenId, uint256 bAmount);
 
-    event RemoveLiquidity(address indexed account, uint256 indexed bTokenId, uint256 lShares, uint256 amount1, uint256 amount2);
+    event AddMargin(address owner, uint256 bTokenId, uint256 bAmount);
 
-    event AddMargin(address indexed account, uint256 indexed bTokenId, uint256 bAmount);
+    event RemoveMargin(address owner, uint256 bTokenId, uint256 bAmount);
 
-    event RemoveMargin(address indexed account, uint256 indexed bTokenId, uint256 bAmount);
+    event Trade(address owner, uint256 symbolId, int256 tradeVolume, uint256 price);
 
-    event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, uint256 price);
+    function initialize(int256[8] memory parameters_, address[4] memory addresses_) external;
 
-    event Liquidate(address indexed liquidator, address indexed account);
+    function getParameters() external view returns (int256[8] memory parameters);
 
-    function initialize(int256[7] memory parameters_, address[4] memory addresses_) external;
-
-    function getParameters() external view returns (
-        int256 minPoolMarginRatio,
-        int256 minInitialMarginRatio,
-        int256 minMaintenanceMarginRatio,
-        int256 minLiquidationReward,
-        int256 maxLiquidationReward,
-        int256 liquidationCutRatio,
-        int256 protocolFeeCollectRatio
-    );
-
-    function getAddresses() external view returns (
-        address pTokenAddress,
-        address liquidatorQualifierAddress,
-        address protocolAddress
-    );
+    function getAddresses() external view returns (address[4] memory addresses);
 
     function getSymbol(uint256 symbolId) external view returns (SymbolInfo memory);
 
     function getBToken(uint256 bTokenId) external view returns (BTokenInfo memory);
 
-    function setParameters(
-        int256 minPoolMarginRatio,
-        int256 minInitialMarginRatio,
-        int256 minMaintenanceMarginRatio,
-        int256 minLiquidationReward,
-        int256 maxLiquidationReward,
-        int256 liquidationCutRatio,
-        int256 protocolFeeCollectRatio
-    ) external;
+    function setParameters(int256[8] memory parameters_) external;
 
-    function setAddresses(
-        address pTokenAddress,
-        address liquidatorQualifierAddress,
-        address protocolAddress
-    ) external;
-
-    function setSymbolParameters(uint256 symbolId, address handlerAddress, int256 feeRatio, int256 fundingRateCoefficient) external;
-
-    function setBTokenParameters(uint256 bTokenId, address handlerAddress, int256 discount) external;
+    function setAddresses(address[4] memory addresses_) external;
 
     function addSymbol(SymbolInfo memory info) external;
 
@@ -89,14 +59,12 @@ interface IPerpetualPool is IMigratablePool {
 
     function addLiquidity(uint256 bTokenId, uint256 bAmount) external;
 
-    function removeLiquidity(uint256 bTokenId, uint256 lShares) external;
+    function removeLiquidity(uint256 bTokenId, uint256 bAmount) external;
 
     function addMargin(uint256 bTokenId, uint256 bAmount) external;
 
     function removeMargin(uint256 bTokenId, uint256 bAmount) external;
 
     function trade(uint256 symbolId, int256 tradeVolume) external;
-
-    function liquidate(address account) external;
 
 }

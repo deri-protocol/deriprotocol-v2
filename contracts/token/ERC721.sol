@@ -52,136 +52,82 @@ contract ERC721 is IERC721, ERC165 {
     // Mapping from owner to operator for all approval
     mapping (address => mapping (address => bool)) _ownerOperator;
 
+    modifier _existsTokenId_(uint256 tokenId) {
+        require(_exists(tokenId), 'ERC721: nonexistent tokenId');
+        _;
+    }
+
+    modifier _existsOwner_(address owner) {
+        require(_exists(owner), 'ERC721: nonexistent owner');
+        _;
+    }
 
     constructor () {
         // register the supported interfaces to conform to ERC721 via ERC165
         _registerInterface(_INTERFACE_ID_ERC721);
     }
 
-    /**
-     * @dev See {IERC721}.{balanceOf}
-     */
     function balanceOf(address owner) public override view returns (uint256) {
-        if (_exists(owner)) {
-            return 1;
-        } else {
-            return 0;
-        }
+        return _exists(owner) ? 1 : 0;
     }
 
-    /**
-     * @dev See {IERC721}.{ownerOf}
-     */
-    function ownerOf(uint256 tokenId) public override view returns (address) {
-        require(_exists(tokenId), 'ERC721: ownerOf for nonexistent tokenId');
+    function ownerOf(uint256 tokenId) public override view _existsTokenId_(tokenId) returns (address) {
         return _tokenIdOwner[tokenId];
     }
 
-    /**
-     * @dev See {IERC721}.{getApproved}
-     */
-    function getApproved(uint256 tokenId) public override view returns (address) {
-        require(_exists(tokenId), 'ERC721: getApproved for nonexistent tokenId');
+    function getApproved(uint256 tokenId) public override view _existsTokenId_(tokenId) returns (address) {
         return _tokenIdOperator[tokenId];
     }
 
-    /**
-     * @dev See {IERC721}.{isApprovedForAll}
-     */
-    function isApprovedForAll(address owner, address operator) public override view returns (bool) {
-        require(_exists(owner), 'ERC721: isApprovedForAll for nonexistent owner');
+    function isApprovedForAll(address owner, address operator) public override view _existsOwner_(owner) returns (bool) {
         return _ownerOperator[owner][operator];
     }
 
-    /**
-     * @dev See {IERC721}.{approve}
-     */
     function approve(address operator, uint256 tokenId) public override {
-        require(msg.sender == ownerOf(tokenId), 'ERC721: approve caller is not owner');
-        _approve(msg.sender, operator, tokenId);
+        require(msg.sender == ownerOf(tokenId), 'ERC721.approve: caller not owner');
+        _tokenIdOperator[tokenId] = operator;
+        emit Approval(msg.sender, operator, tokenId);
     }
 
-    /**
-     * @dev See {IERC721}.{setApprovalForAll}
-     */
     function setApprovalForAll(address operator, bool approved) public override {
-        require(_exists(msg.sender), 'ERC721: setApprovalForAll caller is not existent owner');
+        require(_exists(msg.sender), 'ERC721.setApprovalForAll: nonexistent owner');
         _ownerOperator[msg.sender][operator] = approved;
         emit ApprovalForAll(msg.sender, operator, approved);
     }
 
-    /**
-     * @dev See {IERC721}.{transferFrom}
-     */
     function transferFrom(address from, address to, uint256 tokenId) public override {
         _validateTransfer(msg.sender, from, to, tokenId);
         _transfer(from, to, tokenId);
     }
 
-    /**
-     * @dev See {IERC721}.{safeTransferFrom}
-     */
     function safeTransferFrom(address from, address to, uint256 tokenId) public override {
         safeTransferFrom(from, to, tokenId, '');
     }
 
-    /**
-     * @dev See {IERC721}.{safeTransferFrom}
-     */
-    function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data)
-        public override
-    {
+    function safeTransferFrom(address from, address to, uint256 tokenId, bytes memory data) public override {
         _validateTransfer(msg.sender, from, to, tokenId);
         _safeTransfer(from, to, tokenId, data);
     }
 
+    //================================================================================
 
-    /**
-     * @dev Returns if owner exists.
-     */
     function _exists(address owner) internal view returns (bool) {
         return _ownerTokenId[owner] != 0;
     }
 
-    /**
-     * @dev Returns if tokenId exists.
-     */
     function _exists(uint256 tokenId) internal view returns (bool) {
         return _tokenIdOwner[tokenId] != address(0);
     }
 
-    /**
-     * @dev Approve `operator` to manage `tokenId`, owned by `owner`
-     *
-     * Validation check on parameters should be carried out before calling this function.
-     */
-    function _approve(address owner, address operator, uint256 tokenId) internal {
-        _tokenIdOperator[tokenId] = operator;
-        emit Approval(owner, operator, tokenId);
-    }
-
-    /**
-     * @dev Validate transferFrom parameters
-     */
-    function _validateTransfer(address operator, address from, address to, uint256 tokenId)
-        internal view
-    {
-        require(from == ownerOf(tokenId), 'ERC721: transfer not owned token');
-        require(to != address(0), 'ERC721: transfer to 0 address');
-        require(!_exists(to), 'ERC721: transfer to already existent owner');
+    function _validateTransfer(address operator, address from, address to, uint256 tokenId) internal view {
+        require(from == ownerOf(tokenId), 'ERC721._validateTransfer: not owned token');
+        require(to != address(0) && !_exists(to), 'ERC721._validateTransfer: to address exists or 0');
         require(
             operator == from || _tokenIdOperator[tokenId] == operator || _ownerOperator[from][operator],
-            'ERC721: transfer caller is not owner nor approved'
+            'ERC721._validateTransfer: not owner nor approved'
         );
     }
 
-    /**
-     * @dev Transfers `tokenId` from `from` to `to`.
-     *
-     * Validation check on parameters should be carried out before calling this function.
-     *
-     * Emits a {Transfer} event.
-     */
     function _transfer(address from, address to, uint256 tokenId) internal {
         // clear previous ownership and approvals
         delete _ownerTokenId[from];
