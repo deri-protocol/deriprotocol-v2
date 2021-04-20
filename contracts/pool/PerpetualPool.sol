@@ -198,6 +198,10 @@ contract PerpetualPool is IPerpetualPool, Migratable {
         b.liquidity += delta;
 
         lToken.updateAsset(owner, bTokenId, asset);
+
+        (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities();
+        require(_getBToken0Ratio(totalDynamicEquity, dynamicEquities) >= _minBToken0Ratio, 'insufficient bToken0');
+
         emit AddLiquidity(owner, bTokenId, bAmount);
     }
 
