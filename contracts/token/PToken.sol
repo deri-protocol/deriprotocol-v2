@@ -30,12 +30,7 @@ contract PToken is IPToken, ERC721 {
         _;
     }
 
-    constructor () {
-        _pool = msg.sender;
-    }
-
-    function initialize(string memory name_, string memory symbol_, uint256 numSymbols_, uint256 numBTokens_, address pool_) public override {
-        require(bytes(_name).length == 0 && _pool == address(0), 'PToken.initialize: already intialized');
+    constructor (string memory name_, string memory symbol_, uint256 numSymbols_, uint256 numBTokens_, address pool_) {
         _name = name_;
         _symbol = symbol_;
         _numSymbols = numSymbols_;

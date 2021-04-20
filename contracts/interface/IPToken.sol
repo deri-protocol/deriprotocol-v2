@@ -16,8 +16,6 @@ interface IPToken is IERC721 {
 
     event UpdatePosition(address indexed owner, uint256 indexed symbolId, int256 volume, int256 cost, int256 lastCumulativeFundingRate);
 
-    function initialize(string memory _name, string memory _symbol, uint256 _numSymbols, uint256 _numBTokens, address _pool) external;
-
     function name() external view returns (string memory);
 
     function symbol() external view returns (string memory);

@@ -26,12 +26,7 @@ contract LToken is ILToken, ERC721 {
         _;
     }
 
-    constructor () {
-        _pool = msg.sender;
-    }
-
-    function initialize(string memory name_, string memory symbol_, uint256 numBTokens_, address pool_) public override {
-        require(bytes(_name).length == 0 && _pool == address(0), 'LToken.initialize: already initialized');
+    constructor (string memory name_, string memory symbol_, uint256 numBTokens_, address pool_) {
         _name = name_;
         _symbol = symbol_;
         _numBTokens = numBTokens_;

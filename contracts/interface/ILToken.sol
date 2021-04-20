@@ -24,8 +24,6 @@ interface ILToken is IERC721 {
         int256  lastCumulativePnl
     );
 
-    function initialize(string memory name_, string memory symbol_, uint256 numBTokens_, address pool_) external;
-
     function name() external view returns (string memory);
 
     function symbol() external view returns (string memory);

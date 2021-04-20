@@ -39,19 +39,31 @@ interface IPerpetualPool is IMigratable {
 
     event Trade(address owner, uint256 symbolId, int256 tradeVolume, uint256 price);
 
+    event Liquidate(address liquidator, address owner);
+
     function initialize(int256[8] memory parameters_, address[4] memory addresses_) external;
 
-    function getParameters() external view returns (int256[8] memory parameters);
+    function getParameters() external view returns (
+        int256 minBToken0Ratio,
+        int256 minPoolMarginRatio,
+        int256 minInitialMarginRatio,
+        int256 minMaintenanceMarginRatio,
+        int256 minLiquidationReward,
+        int256 maxLiquidationReward,
+        int256 liquidationCutRatio,
+        int256 protocolFeeCollectRatio
+    );
 
-    function getAddresses() external view returns (address[4] memory addresses);
+    function getAddresses() external view returns (
+        address pTokenAddress,
+        address lTokenAddress,
+        address liquidatorQualifierAddress,
+        address protocolAddress
+    );
 
     function getSymbol(uint256 symbolId) external view returns (SymbolInfo memory);
 
     function getBToken(uint256 bTokenId) external view returns (BTokenInfo memory);
-
-    function setParameters(int256[8] memory parameters_) external;
-
-    function setAddresses(address[4] memory addresses_) external;
 
     function addSymbol(SymbolInfo memory info) external;
 
@@ -66,5 +78,7 @@ interface IPerpetualPool is IMigratable {
     function removeMargin(uint256 bTokenId, uint256 bAmount) external;
 
     function trade(uint256 symbolId, int256 tradeVolume) external;
+
+    function liquidate(address owner) external;
 
 }
