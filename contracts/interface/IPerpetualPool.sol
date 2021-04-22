@@ -41,6 +41,8 @@ interface IPerpetualPool is IMigratable {
 
     event Liquidate(address liquidator, address owner);
 
+    event ProtocolCollection(uint256 amount);
+
     function initialize(int256[8] memory parameters_, address[4] memory addresses_) external;
 
     function getParameters() external view returns (
@@ -60,6 +62,10 @@ interface IPerpetualPool is IMigratable {
         address liquidatorQualifierAddress,
         address protocolAddress
     );
+
+    function getProtocolLiquidity() external view returns (uint256);
+
+    function collectProtocolLiquidity() external;
 
     function getSymbol(uint256 symbolId) external view returns (SymbolInfo memory);
 

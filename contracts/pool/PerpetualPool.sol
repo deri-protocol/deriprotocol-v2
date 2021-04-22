@@ -93,6 +93,18 @@ contract PerpetualPool is IPerpetualPool, Migratable {
         protocolAddress = _protocolAddress;
     }
 
+    function getProtocolLiquidity() public override view returns (uint256) {
+        return uint256(_protocolLiquidity);
+    }
+
+    function collectProtocolLiquidity() public override {
+        require(msg.sender == _protocolAddress, 'not allowed');
+        uint256 amount = uint256(_protocolLiquidity);
+        IERC20(_bTokens[0].bTokenAddress).safeTransfer(_protocolAddress, amount.rescale(18, _bTokens[0].decimals));
+        _protocolLiquidity = 0;
+        emit ProtocolCollection(amount);
+    }
+
     function getSymbol(uint256 symbolId) public override view returns (SymbolInfo memory) {
         return _symbols[symbolId];
     }
@@ -208,6 +220,7 @@ contract PerpetualPool is IPerpetualPool, Migratable {
     function _removeLiquidity(address owner, uint256 bTokenId, uint256 bAmount) internal _lock_ {
         _update();
         BTokenInfo storage b = _bTokens[bTokenId];
+        bAmount = bAmount.reformat(b.decimals);
         ILToken lToken = ILToken(_lTokenAddress);
         ILToken.Asset memory asset = lToken.getAsset(owner, bTokenId);
 
@@ -237,8 +250,8 @@ contract PerpetualPool is IPerpetualPool, Migratable {
 
         if (amount >= asset.liquidity || amount >= asset.liquidity + deltaLiquidity) {
             bAmount = (asset.liquidity + deltaLiquidity).itou();
-            asset.liquidity = 0;
             b.liquidity -= asset.liquidity;
+            asset.liquidity = 0;
         } else {
             asset.liquidity += deltaLiquidity - amount;
             b.liquidity += deltaLiquidity - amount;
@@ -296,8 +309,8 @@ contract PerpetualPool is IPerpetualPool, Migratable {
         _update();
         _settleTraderFundingFee(owner);
 
-        IPToken pToken = IPToken(_pTokenAddress);
         tradeVolume = tradeVolume.reformat(0);
+        IPToken pToken = IPToken(_pTokenAddress);
         SymbolInfo storage s = _symbols[symbolId];
         IPToken.Position memory p = pToken.getPosition(owner, symbolId);
 
