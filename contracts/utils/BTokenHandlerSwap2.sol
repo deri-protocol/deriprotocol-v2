@@ -87,7 +87,7 @@ contract BTokenHandlerSwap2 is IBTokenHandler {
         controller = msg.sender;
     }
 
-    function getPrice() public override _pool_ returns (uint256) {
+    function getPrice() public override returns (uint256) {
         IUniswapV2Pair p;
         uint256 reserve0;
         uint256 reserve1;

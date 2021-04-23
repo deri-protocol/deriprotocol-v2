@@ -26,11 +26,10 @@ contract LToken is ILToken, ERC721 {
         _;
     }
 
-    constructor (string memory name_, string memory symbol_, uint256 numBTokens_, address pool_) {
+    constructor (string memory name_, string memory symbol_, uint256 numBTokens_) {
         _name = name_;
         _symbol = symbol_;
         _numBTokens = numBTokens_;
-        _pool = pool_;
     }
 
     function name() public override view returns (string memory) {
@@ -57,8 +56,8 @@ contract LToken is ILToken, ERC721 {
         return _numBTokens;
     }
 
-    function setPool(address newPool) public override _pool_ {
-        require(newPool != address(0), 'LToken.setPool: 0 address');
+    function setPool(address newPool) public override {
+        require(_pool == address(0) || _pool == msg.sender, 'LToken.setPool: not allowed');
         _pool = newPool;
     }
 
@@ -97,11 +96,8 @@ contract LToken is ILToken, ERC721 {
     }
 
     function mint(address owner) public override _pool_ {
-        require(!_exists(owner), 'LToken.mint: existent owner');
-
         _totalSupply++;
-        _totalMinted++;
-        uint256 tokenId = _totalMinted;
+        uint256 tokenId = ++_totalMinted;
         require(!_exists(tokenId), 'LToken.mint: existent tokenId');
 
         _ownerTokenId[owner] = tokenId;
@@ -111,7 +107,6 @@ contract LToken is ILToken, ERC721 {
     }
 
     function burn(address owner) public override _pool_ {
-        require(_exists(owner), 'LToken.burn: nonexistent owner');
         uint256 tokenId = _ownerTokenId[owner];
 
         _totalSupply--;

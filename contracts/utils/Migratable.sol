@@ -20,8 +20,8 @@ abstract contract Migratable is IMigratable, Ownable {
     }
 
     function prepareMigration(address target, uint256 graceDays) public override _controller_ {
-        require(target != address(0), 'Migratable.prepareMigration: to 0 address');
-        require(graceDays >= 3 && graceDays <= 365, 'Migratable.prepareMigration: graceDays must be 3-365 days');
+        require(target != address(0), 'Migratable: target 0');
+        require(graceDays >= 3 && graceDays <= 365, 'Migratable: graceDays must be 3-365');
 
         _migrationTimestamp = block.timestamp + graceDays * 1 days;
         _migrationDestination = target;

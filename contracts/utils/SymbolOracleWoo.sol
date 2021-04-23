@@ -2,7 +2,7 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-contract SymbolHandlerWoo {
+contract SymbolOracleWoo {
 
     address public immutable pair;
     address public immutable quote;
