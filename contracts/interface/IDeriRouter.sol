@@ -7,33 +7,34 @@ import '../interface/IOwnable.sol';
 interface IDeriRouter is IOwnable {
 
     struct BToken {
-        address bTokenAddress;
-        address handlerAddress;
-        uint256 decimals;
-        uint256 discount;
+        string  symbol;
+        address oracleAddress;
     }
 
     struct Symbol {
         string  symbol;
-        address handlerAddress;
-        uint256 multiplier;
-        uint256 feeRatio;
-        uint256 fundingRateCoefficient;
+        address oracleAddress;
     }
+
+    function pool() external view returns (address);
+
+    function liquidatorQualifier() external view returns (address);
 
     function setPool(address poolAddress) external;
 
-    function setLiquidatorQualifierAddress(address qualifierAddress) external;
+    function setLiquidatorQualifier(address qualifier) external;
 
     function addBToken(
+        string memory symbol,
         address bTokenAddress,
-        address handlerAddress,
+        address swapperAddress,
+        address oracleAddress,
         uint256 discount
     ) external;
 
     function addSymbol(
-        string  memory symbol,
-        address handlerAddress,
+        string memory symbol,
+        address oracleAddress,
         uint256 multiplier,
         uint256 feeRatio,
         uint256 fundingRateCoefficient

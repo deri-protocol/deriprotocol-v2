@@ -2,9 +2,7 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-interface IBTokenHandler {
-
-    function getPrice() external returns (uint256);
+interface IBTokenSwapper {
 
     function swapExactBaseForQuote(uint256 amountB) external returns (uint256 resultB, uint256 resultQ);
 

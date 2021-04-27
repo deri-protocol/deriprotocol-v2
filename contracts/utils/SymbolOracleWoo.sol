@@ -2,7 +2,9 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-contract SymbolHandlerWoo {
+import '../interface/IOracle.sol';
+
+contract SymbolOracleWoo is IOracle {
 
     /*
     Contract address: 0x6e1BDdF0a6463BE035e5952cf9bd17427758eD95
@@ -14,18 +16,20 @@ contract SymbolHandlerWoo {
         ETH :   0x9d23DdB7c17222508EBFF303517E71b0Ccf60019
     */
 
-    address public constant oracleAddress = 0x6e1BDdF0a6463BE035e5952cf9bd17427758eD95;
-    address public immutable tokenAddress;
+    address public immutable oracle;
+    address public immutable token;
     uint256 public immutable delayAllowance;
 
-    constructor (address tokenAddress_, uint256 delayAllowance_) {
-        tokenAddress = tokenAddress_;
+    constructor (address oracle_, address token_, uint256 delayAllowance_) {
+        oracle = oracle_;
+        token = token_;
         delayAllowance = delayAllowance_;
     }
 
-    function getPrice() public view returns (uint256) {
-        (, uint256 price, , , uint256 timestamp) = IWooOracle(oracleAddress).getPrice(tokenAddress);
-        require(delayAllowance == 0 || block.timestamp - timestamp <= delayAllowance, 'SymbolHandlerWoo: invalid price');
+    function getPrice() public override view returns (uint256) {
+        (, uint256 price, bool isValid, bool isStale, uint256 timestamp) = IWooOracle(oracle).getPrice(token);
+        require(isValid && !isStale && block.timestamp - timestamp <= delayAllowance,
+                'SymbolHandlerWoo.getPrice: invalid price');
         return price;
     }
 
@@ -41,4 +45,3 @@ interface IWooOracle {
         uint256 timestamp
     );
 }
-

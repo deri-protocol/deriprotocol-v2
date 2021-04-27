@@ -7,8 +7,12 @@ import './IERC721.sol';
 interface IPToken is IERC721 {
 
     struct Position {
+        // position volume, long is positive and short is negative
         int256 volume;
+        // the cost the establish this position
         int256 cost;
+        // the last cumulativeFundingRate since last funding settlement for this position
+        // the overflow for this value in intended
         int256 lastCumulativeFundingRate;
     }
 

@@ -3,7 +3,7 @@
 pragma solidity >=0.8.0 <0.9.0;
 
 import '../interface/IERC20.sol';
-import '../interface/IBTokenHandler.sol';
+import '../interface/IBTokenSwapper.sol';
 import '../interface/IPToken.sol';
 import '../interface/ILToken.sol';
 import '../interface/IPerpetualPool.sol';
@@ -17,8 +17,7 @@ contract PerpetualPool is IPerpetualPool, Migratable {
     using SafeMath for int256;
     using SafeERC20 for IERC20;
 
-    int256  constant ONE  = 10**18;
-    uint256 constant UONE = 10**18;
+    int256  constant ONE = 10**18;
 
     // decimals for bToken0 (settlement token), make this immutable to save gas
     uint256 immutable _decimals0;
@@ -128,19 +127,19 @@ contract PerpetualPool is IPerpetualPool, Migratable {
         return _symbols[symbolId];
     }
 
-    function addBToken(address bTokenAddress, address handlerAddress, uint256 discount)
+    function addBToken(address bTokenAddress, address swapperAddress, uint256 discount)
         public override _router_
     {
         uint256 decimals = IERC20(bTokenAddress).decimals();
         require(_bTokens.length > 0 || decimals == _decimals0, 'wrong decimals');
         BTokenInfo memory b;
         b.bTokenAddress = bTokenAddress;
-        b.handlerAddress = handlerAddress;
+        b.swapperAddress = swapperAddress;
         b.decimals = decimals;
         b.discount = int256(discount);
         if (_bTokens.length > 0) {
-            IERC20(_bTokens[0].bTokenAddress).safeApprove(handlerAddress, type(uint256).max);
-            IERC20(bTokenAddress).safeApprove(handlerAddress, type(uint256).max);
+            IERC20(_bTokens[0].bTokenAddress).safeApprove(swapperAddress, type(uint256).max);
+            IERC20(bTokenAddress).safeApprove(swapperAddress, type(uint256).max);
         } else {
             b.price = ONE;
         }
@@ -296,12 +295,12 @@ contract PerpetualPool is IPerpetualPool, Migratable {
         } else {
             asset.pnl += pnl;
             if (asset.pnl < 0) {
-                (uint256 amountB0, uint256 amountBX) = IBTokenHandler(b.handlerAddress).swapQuoteForExactBase((-asset.pnl).itou(), asset.liquidity.itou());
+                (uint256 amountB0, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapQuoteForExactBase((-asset.pnl).itou(), asset.liquidity.itou());
                 deltaLiquidity = -amountBX.utoi();
                 deltaPnl = amountB0.utoi();
                 asset.pnl += amountB0.utoi();
             } else if (asset.pnl > 0 && amount >= asset.liquidity) {
-                (, uint256 amountBX) = IBTokenHandler(b.handlerAddress).swapExactBaseForQuote(asset.pnl.itou());
+                (, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapExactBaseForQuote(asset.pnl.itou());
                 deltaLiquidity = amountBX.utoi();
                 deltaPnl = -asset.pnl;
                 asset.pnl = 0;
@@ -428,7 +427,7 @@ contract PerpetualPool is IPerpetualPool, Migratable {
         netEquity += margins[0];
         for (uint256 i = 1; i < blength; i++) {
             if (margins[i] > 0) {
-                (uint256 amountB0, ) = IBTokenHandler(_bTokens[i].handlerAddress).swapExactQuoteForBase(margins[i].itou());
+                (uint256 amountB0, ) = IBTokenSwapper(_bTokens[i].swapperAddress).swapExactQuoteForBase(margins[i].itou());
                 netEquity += amountB0.utoi();
             }
         }
@@ -578,7 +577,7 @@ contract PerpetualPool is IPerpetualPool, Migratable {
             uint256 amountBX;
             for (uint256 i = blength - 1; i > 0; i--) {
                 if (margins[i] > 0) {
-                    (amountB0, amountBX) = IBTokenHandler(_bTokens[i].handlerAddress).swapQuoteForExactBase((-margins[0]).itou(), margins[i].itou());
+                    (amountB0, amountBX) = IBTokenSwapper(_bTokens[i].swapperAddress).swapQuoteForExactBase((-margins[0]).itou(), margins[i].itou());
                     margins[0] += amountB0.utoi();
                     margins[i] -= amountBX.utoi();
                 }

@@ -8,7 +8,7 @@ interface IPerpetualPool is IMigratable {
 
     struct BTokenInfo {
         address bTokenAddress;
-        address handlerAddress;
+        address swapperAddress;
         uint256 decimals;
         int256  discount;
         int256  price;
