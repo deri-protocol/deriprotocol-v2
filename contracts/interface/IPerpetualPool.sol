@@ -9,6 +9,7 @@ interface IPerpetualPool is IMigratable {
     struct BTokenInfo {
         address bTokenAddress;
         address swapperAddress;
+        address oracleAddress;
         uint256 decimals;
         int256  discount;
         int256  price;
@@ -19,6 +20,7 @@ interface IPerpetualPool is IMigratable {
 
     struct SymbolInfo {
         string  symbol;
+        address oracleAddress;
         int256  multiplier;
         int256  feeRatio;
         int256  fundingRateCoefficient;
@@ -26,13 +28,6 @@ interface IPerpetualPool is IMigratable {
         int256  cumulativeFundingRate;
         int256  tradersNetVolume;
         int256  tradersNetCost;
-    }
-
-    struct TradeParams {
-        int256 curCost;
-        int256 fee;
-        int256 realizedCost;
-        int256 protocolFee;
     }
 
     event AddLiquidity(address owner, uint256 bTokenId, uint256 bAmount);
@@ -49,8 +44,9 @@ interface IPerpetualPool is IMigratable {
 
     event ProtocolCollection(uint256 amount);
 
+    function initialize(uint256[8] memory parameters, address[3] memory addresses) external;
+
     function getParameters() external view returns (
-        uint256 decimals0,
         uint256 minBToken0Ratio,
         uint256 minPoolMarginRatio,
         uint256 minInitialMarginRatio,
@@ -61,11 +57,12 @@ interface IPerpetualPool is IMigratable {
         uint256 protocolFeeCollectRatio
     );
 
+    function setParameters(uint256[8] memory parameters) external;
+
     function getAddresses() external view returns (
-        address routerAddress,
-        address pTokenAddress,
         address lTokenAddress,
-        address protocolAddress
+        address pTokenAddress,
+        address protocolFeeCollectAddress
     );
 
     function getProtocolLiquidity() external view returns (uint256);
@@ -76,29 +73,35 @@ interface IPerpetualPool is IMigratable {
 
     function getSymbol(uint256 symbolId) external view returns (SymbolInfo memory);
 
-    function addBToken(address bTokenAddress, address swapperAddress, uint256 discount) external;
+    function addBToken(
+        address bTokenAddress,
+        address swapperAddress,
+        address oracleAddress,
+        uint256 discount
+    ) external;
 
     function addSymbol(
         string memory symbol,
+        address oracleAddress,
         uint256 multiplier,
         uint256 feeRatio,
         uint256 fundingRateCoefficient
     ) external;
 
+    function setBToken(uint256 bTokenId, address swapperAddress, address oracleAddress, uint256 discount) external;
+
+    function setSymbol(uint256 symbolId, address oracleAddress, uint256 feeRatio, uint256 fundingRateCoefficient) external;
+
     function addLiquidity(
         address owner,
         uint256 bTokenId,
-        uint256 bAmount,
-        int256[] memory bPrices,
-        int256[] memory sPrices
+        uint256 bAmount
     ) external;
 
     function removeLiquidity(
         address owner,
         uint256 bTokenId,
-        uint256 bAmount,
-        int256[] memory bPrices,
-        int256[] memory sPrices
+        uint256 bAmount
     ) external;
 
     function addMargin(
@@ -110,24 +113,18 @@ interface IPerpetualPool is IMigratable {
     function removeMargin(
         address owner,
         uint256 bTokenId,
-        uint256 bAmount,
-        int256[] memory bPrices,
-        int256[] memory sPrices
+        uint256 bAmount
     ) external;
 
     function trade(
         address owner,
         uint256 symbolId,
-        int256 tradeVolume,
-        int256[] memory bPrices,
-        int256[] memory sPrices
+        int256 tradeVolume
     ) external;
 
     function liquidate(
         address liquidator,
-        address owner,
-        int256[] memory bPrices,
-        int256[] memory sPrices
+        address owner
     ) external;
 
 }
