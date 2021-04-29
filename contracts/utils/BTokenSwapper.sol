@@ -32,14 +32,14 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         IERC20 b = IERC20(base);
         IERC20 q = IERC20(quote);
 
-        resultB = amountB;
+        uint256 q1 = q.balanceOf(caller);
         amountB = amountB.rescale(18, bDecimals);
         b.safeTransferFrom(caller, address(this), amountB);
-        _swapExactTokensForTokens(base, quote);
+        _swapExactTokensForTokens(base, quote, caller);
+        uint256 q2 = q.balanceOf(caller);
 
-        resultQ = q.balanceOf(address(this));
-        q.safeTransfer(caller, resultQ);
-        resultQ = resultQ.rescale(qDecimals, 18);
+        resultB = amountB.rescale(bDecimals, 18);
+        resultQ = (q2 - q1).rescale(qDecimals, 18);
     }
 
     function swapExactQuoteForBase(uint256 amountQ) public override returns (uint256 resultB, uint256 resultQ) {
@@ -48,14 +48,14 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         IERC20 b = IERC20(base);
         IERC20 q = IERC20(quote);
 
-        resultQ = amountQ;
+        uint256 b1 = b.balanceOf(caller);
         amountQ = amountQ.rescale(18, qDecimals);
         q.safeTransferFrom(caller, address(this), amountQ);
-        _swapExactTokensForTokens(quote, base);
+        _swapExactTokensForTokens(quote, base, caller);
+        uint256 b2 = b.balanceOf(caller);
 
-        resultB = b.balanceOf(address(this));
-        b.safeTransfer(caller, resultB);
-        resultB = resultB.rescale(bDecimals, 18);
+        resultB = (b2 - b1).rescale(bDecimals, 18);
+        resultQ = amountQ.rescale(qDecimals, 18);
     }
 
     function swapBaseForExactQuote(uint256 amountB, uint256 amountQ) public override returns (uint256 resultB, uint256 resultQ) {
@@ -71,13 +71,13 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         amountQ = amountQ.rescale(18, qDecimals);
         b.safeTransferFrom(caller, address(this), amountB);
         if (amountB >= _getBaseAmountIn(amountQ) * 11 / 10) {
-            _swapTokensForExactTokens(base, quote, amountQ);
+            _swapTokensForExactTokens(base, quote, amountQ, caller);
         } else {
-            _swapExactTokensForTokens(base, quote);
+            _swapExactTokensForTokens(base, quote, caller);
         }
 
-        b.safeTransfer(caller, b.balanceOf(address(this)));
-        q.safeTransfer(caller, q.balanceOf(address(this)));
+        uint256 remainB = b.balanceOf(address(this));
+        if (resultB != 0) b.safeTransfer(caller, remainB);
 
         uint256 b2 = b.balanceOf(caller);
         uint256 q2 = q.balanceOf(caller);
@@ -99,13 +99,13 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         amountQ = amountQ.rescale(18, qDecimals);
         q.safeTransferFrom(caller, address(this), amountQ);
         if (amountQ >= _getQuoteAmountIn(amountB) * 11 / 10) {
-            _swapTokensForExactTokens(quote, base, amountB);
+            _swapTokensForExactTokens(quote, base, amountB, caller);
         } else {
-            _swapExactTokensForTokens(quote, base);
+            _swapExactTokensForTokens(quote, base, caller);
         }
 
-        b.safeTransfer(caller, b.balanceOf(address(this)));
-        q.safeTransfer(caller, q.balanceOf(address(this)));
+        uint256 remainQ = q.balanceOf(address(this));
+        if (remainQ != 0) q.safeTransfer(caller, remainQ);
 
         uint256 b2 = b.balanceOf(caller);
         uint256 q2 = q.balanceOf(caller);
@@ -127,8 +127,8 @@ abstract contract BTokenSwapper is IBTokenSwapper {
 
     function _getQuoteAmountIn(uint256 baseAmountOut) internal virtual view returns (uint256);
 
-    function _swapExactTokensForTokens(address a, address b) internal virtual;
+    function _swapExactTokensForTokens(address a, address b, address to) internal virtual;
 
-    function _swapTokensForExactTokens(address a, address b, uint256 amount) internal virtual;
+    function _swapTokensForExactTokens(address a, address b, uint256 amount, address to) internal virtual;
 
 }

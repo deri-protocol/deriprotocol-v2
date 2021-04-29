@@ -2,9 +2,7 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-import './IMigratable.sol';
-
-interface IPerpetualPool is IMigratable {
+interface IPerpetualPool {
 
     struct BTokenInfo {
         address bTokenAddress;
@@ -30,23 +28,22 @@ interface IPerpetualPool is IMigratable {
         int256  tradersNetCost;
     }
 
-    event AddLiquidity(address owner, uint256 bTokenId, uint256 bAmount);
+    event AddLiquidity(address indexed owner, uint256 indexed bTokenId, uint256 bAmount);
 
-    event RemoveLiquidity(address owner, uint256 bTokenId, uint256 bAmount);
+    event RemoveLiquidity(address indexed owner, uint256 indexed bTokenId, uint256 bAmount);
 
-    event AddMargin(address owner, uint256 bTokenId, uint256 bAmount);
+    event AddMargin(address indexed owner, uint256 indexed bTokenId, uint256 bAmount);
 
-    event RemoveMargin(address owner, uint256 bTokenId, uint256 bAmount);
+    event RemoveMargin(address indexed owner, uint256 indexed bTokenId, uint256 bAmount);
 
-    event Trade(address owner, uint256 symbolId, int256 tradeVolume, uint256 price);
+    event Trade(address indexed owner, uint256 indexed symbolId, int256 tradeVolume, uint256 price);
 
-    event Liquidate(address liquidator, address owner);
+    event Liquidate(address indexed owner, address liquidator, uint256 reward);
 
-    event ProtocolCollection(uint256 amount);
-
-    function initialize(uint256[8] memory parameters, address[3] memory addresses) external;
+    event ProtocolFeeCollection(address indexed collector, uint256 amount);
 
     function getParameters() external view returns (
+        uint256 decimals0,
         uint256 minBToken0Ratio,
         uint256 minPoolMarginRatio,
         uint256 minInitialMarginRatio,
@@ -57,74 +54,48 @@ interface IPerpetualPool is IMigratable {
         uint256 protocolFeeCollectRatio
     );
 
-    function setParameters(uint256[8] memory parameters) external;
-
     function getAddresses() external view returns (
         address lTokenAddress,
         address pTokenAddress,
-        address protocolFeeCollectAddress
+        address routerAddress
     );
 
-    function getProtocolLiquidity() external view returns (uint256);
-
-    function collectProtocolLiquidity() external;
+    function getLength() external view returns (uint256, uint256);
 
     function getBToken(uint256 bTokenId) external view returns (BTokenInfo memory);
 
     function getSymbol(uint256 symbolId) external view returns (SymbolInfo memory);
 
-    function addBToken(
-        address bTokenAddress,
-        address swapperAddress,
-        address oracleAddress,
-        uint256 discount
-    ) external;
+    function getBTokenOracle(uint256 bTokenId) external view returns (address);
 
-    function addSymbol(
-        string memory symbol,
-        address oracleAddress,
-        uint256 multiplier,
-        uint256 feeRatio,
-        uint256 fundingRateCoefficient
-    ) external;
+    function getSymbolOracle(uint256 symbolId) external view returns (address);
 
-    function setBToken(uint256 bTokenId, address swapperAddress, address oracleAddress, uint256 discount) external;
+    function getProtocolFeeCollected() external view returns (uint256);
 
-    function setSymbol(uint256 symbolId, address oracleAddress, uint256 feeRatio, uint256 fundingRateCoefficient) external;
+    function collectProtocolFee(address collector) external;
 
-    function addLiquidity(
-        address owner,
-        uint256 bTokenId,
-        uint256 bAmount
-    ) external;
+    function addBToken(BTokenInfo memory info) external;
 
-    function removeLiquidity(
-        address owner,
-        uint256 bTokenId,
-        uint256 bAmount
-    ) external;
+    function addSymbol(SymbolInfo memory info) external;
 
-    function addMargin(
-        address owner,
-        uint256 bTokenId,
-        uint256 bAmount
-    ) external;
+    function setBTokenParameters(uint256 bTokenId, address swapperAddress, address oracleAddress, uint256 discount) external;
 
-    function removeMargin(
-        address owner,
-        uint256 bTokenId,
-        uint256 bAmount
-    ) external;
+    function setSymbolParameters(uint256 symbolId, address oracleAddress, uint256 feeRatio, uint256 fundingRateCoefficient) external;
 
-    function trade(
-        address owner,
-        uint256 symbolId,
-        int256 tradeVolume
-    ) external;
+    function approvePoolMigration(address targetPool) external;
 
-    function liquidate(
-        address liquidator,
-        address owner
-    ) external;
+    function executePoolMigration(address sourcePool) external;
+
+    function addLiquidity(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) external;
+
+    function removeLiquidity(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) external;
+
+    function addMargin(address owner, uint256 bTokenId, uint256 bAmount) external;
+
+    function removeMargin(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) external;
+
+    function trade(address owner, uint256 symbolId, int256 tradeVolume, uint256 blength, uint256 slength) external;
+
+    function liquidate(address liquidator, address owner, uint256 blength, uint256 slength) external;
 
 }

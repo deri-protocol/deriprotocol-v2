@@ -29,8 +29,4 @@ abstract contract Migratable is IMigratable, Ownable {
         emit PrepareMigration(_migrationTimestamp, address(this), _migrationDestination);
     }
 
-    function approveMigration() public override virtual {}
-
-    function executeMigration(address source) public override virtual {}
-
 }

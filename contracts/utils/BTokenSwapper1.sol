@@ -50,7 +50,7 @@ contract BTokenSwapper1 is IBTokenSwapper, BTokenSwapper {
         return IUniswapV2Router02(router).getAmountIn(baseAmountOut, reserveIn, reserveOut);
     }
 
-    function _swapExactTokensForTokens(address a, address b) internal override {
+    function _swapExactTokensForTokens(address a, address b, address to) internal override {
         address[] memory path = new address[](2);
         path[0] = a;
         path[1] = b;
@@ -59,12 +59,12 @@ contract BTokenSwapper1 is IBTokenSwapper, BTokenSwapper {
             IERC20(a).balanceOf(address(this)),
             0,
             path,
-            address(this),
+            to,
             block.timestamp + 3600
         );
     }
 
-    function _swapTokensForExactTokens(address a, address b, uint256 amount) internal override {
+    function _swapTokensForExactTokens(address a, address b, uint256 amount, address to) internal override {
         address[] memory path = new address[](2);
         path[0] = a;
         path[1] = b;
@@ -73,7 +73,7 @@ contract BTokenSwapper1 is IBTokenSwapper, BTokenSwapper {
             amount,
             IERC20(a).balanceOf(address(this)),
             path,
-            address(this),
+            to,
             block.timestamp + 3600
         );
     }
