@@ -9,19 +9,19 @@ library SafeMath {
 
     /// convert uint256 to int256
     function utoi(uint256 a) internal pure returns (int256) {
-        require(a <= UMAX, 'SafeMath.utoi: overflow');
+        require(a <= UMAX, 'UIO');
         return int256(a);
     }
 
     /// convert int256 to uint256
     function itou(int256 a) internal pure returns (uint256) {
-        require(a >= 0, 'SafeMath.itou: overflow');
+        require(a >= 0, 'IUO');
         return uint256(a);
     }
 
     /// take abs of int256
     function abs(int256 a) internal pure returns (int256) {
-        require(a != IMIN, 'SafeMath.abs: overflow');
+        require(a != IMIN, 'AO');
         return a >= 0 ? a : -a;
     }
 
@@ -46,6 +46,17 @@ library SafeMath {
     /// the reformatted value is still in 10**18 base
     function reformat(int256 a, uint256 decimals) internal pure returns (int256) {
         return decimals == 18 ? a : rescale(rescale(a, 18, decimals), decimals, 18);
+    }
+
+    /// ceiling value away from zero, return in 10**18 based
+    function ceil(int256 a, uint256 decimals) internal pure returns (int256) {
+        if (reformat(a, decimals) == a) {
+            return a;
+        } else {
+            int256 b = rescale(a, 18, decimals);
+            b += a > 0 ? int256(1) : int256(-1);
+            return rescale(b, decimals, 18);
+        }
     }
 
 }

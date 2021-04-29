@@ -11,6 +11,20 @@ import '../interface/IPerpetualPool.sol';
 import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
 
+/*
+
+Revert Code:
+
+    RE:     reentry
+    OR:     can only called by router
+    WD:     wrong decimals
+    IB0:    insufficient bToken0
+    IL:     pool insufficient liquidity
+    IM:     trader insufficient margin
+    NOL:    cannot liquidate
+
+*/
+
 contract PerpetualPool is IPerpetualPool {
 
     using SafeMath for uint256;
@@ -42,14 +56,14 @@ contract PerpetualPool is IPerpetualPool {
 
     bool private _mutex;
     modifier _lock_() {
-        require(!_mutex, 'reentry');
+        require(!_mutex, 'RE');
         _mutex = true;
         _;
         _mutex = false;
     }
 
     modifier _router_() {
-        require(msg.sender == _routerAddress, 'only router');
+        require(msg.sender == _routerAddress, 'OR');
         _;
     }
 
@@ -126,10 +140,14 @@ contract PerpetualPool is IPerpetualPool {
     }
 
     function collectProtocolFee(address collector) public override _router_ {
-        uint256 amount = uint256(_protocolFeeCollected);
-        IERC20(_bTokens[0].bTokenAddress).safeTransfer(collector, amount.rescale(18, _decimals0));
+        IERC20 token = IERC20(_bTokens[0].bTokenAddress);
+        uint256 amount = uint256(_protocolFeeCollected).rescale(18, _decimals0);
+        if (amount < token.balanceOf(address(this))) {
+            amount = token.balanceOf(address(this));
+        }
+        token.safeTransfer(collector, amount);
         _protocolFeeCollected = 0;
-        emit ProtocolFeeCollection(collector, amount);
+        emit ProtocolFeeCollection(collector, amount.rescale(_decimals0, 18));
     }
 
     function addBToken(BTokenInfo memory info) public override _router_ {
@@ -137,7 +155,7 @@ contract PerpetualPool is IPerpetualPool {
             IERC20(_bTokens[0].bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
             IERC20(info.bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
         } else {
-            require(info.decimals == _decimals0, 'wrong decimals');
+            require(info.decimals == _decimals0, 'WD');
             info.price = ONE;
         }
         _bTokens.push(info);
@@ -205,10 +223,11 @@ contract PerpetualPool is IPerpetualPool {
         ILToken.Asset memory asset = lToken.getAsset(owner, bTokenId);
 
         int256 delta;
-        int256 pnl = ((cumulativePnl - asset.lastCumulativePnl) * asset.liquidity / ONE).reformat(_decimals0);
+        int256 pnl = (cumulativePnl - asset.lastCumulativePnl) * asset.liquidity / ONE;
         if (bTokenId == 0) {
-            delta = bAmount.utoi() + pnl;
+            delta = bAmount.utoi() + pnl.reformat(_decimals0);
             b.pnl -= pnl; // this pnl comes from b.pnl, thus should be deducted from b.pnl
+            _protocolFeeCollected += pnl - pnl.reformat(_decimals0); // deal with accuracy tail
         } else {
             delta = bAmount.utoi();
             asset.pnl += pnl;
@@ -220,7 +239,7 @@ contract PerpetualPool is IPerpetualPool {
         lToken.updateAsset(owner, bTokenId, asset);
 
         (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
-        require(_getBToken0Ratio(totalDynamicEquity, dynamicEquities) >= _minBToken0Ratio, 'insufficient bToken0');
+        require(_getBToken0Ratio(totalDynamicEquity, dynamicEquities) >= _minBToken0Ratio, 'IB0');
 
         emit AddLiquidity(owner, bTokenId, bAmount);
     }
@@ -237,16 +256,19 @@ contract PerpetualPool is IPerpetualPool {
         { // scope begin
         int256 cumulativePnl = b.cumulativePnl;
         int256 amount = bAmount.utoi();
-        int256 pnl = ((cumulativePnl - asset.lastCumulativePnl) * asset.liquidity / ONE).reformat(_decimals0);
+        int256 pnl = (cumulativePnl - asset.lastCumulativePnl) * asset.liquidity / ONE;
         int256 deltaLiquidity;
         int256 deltaPnl;
         if (bTokenId == 0) {
-            deltaLiquidity = pnl;
+            deltaLiquidity = pnl.reformat(_decimals0);
             deltaPnl = -pnl;
+            _protocolFeeCollected += pnl - pnl.reformat(_decimals0);
         } else {
             asset.pnl += pnl;
             if (asset.pnl < 0) {
-                (uint256 amountB0, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapQuoteForExactBase((-asset.pnl).itou(), asset.liquidity.itou());
+                (uint256 amountB0, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapQuoteForExactBase(
+                    (-asset.pnl).ceil(_decimals0).itou(), asset.liquidity.itou()
+                );
                 deltaLiquidity = -amountBX.utoi();
                 deltaPnl = amountB0.utoi();
                 asset.pnl += amountB0.utoi();
@@ -254,6 +276,7 @@ contract PerpetualPool is IPerpetualPool {
                 (, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapExactBaseForQuote(asset.pnl.itou());
                 deltaLiquidity = amountBX.utoi();
                 deltaPnl = -asset.pnl;
+                _protocolFeeCollected += asset.pnl - asset.pnl.reformat(_decimals0);
                 asset.pnl = 0;
             }
         }
@@ -272,8 +295,8 @@ contract PerpetualPool is IPerpetualPool {
         } // scope end
 
         (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
-        require(_getBToken0Ratio(totalDynamicEquity, dynamicEquities) >= _minBToken0Ratio, 'insufficient bToken0');
-        require(_getPoolMarginRatio(totalDynamicEquity, slength) >= _minPoolMarginRatio, 'pool insufficient liquidity');
+        require(_getBToken0Ratio(totalDynamicEquity, dynamicEquities) >= _minBToken0Ratio, 'IB0');
+        require(_getPoolMarginRatio(totalDynamicEquity, slength) >= _minPoolMarginRatio, 'IL');
 
         IERC20(b.bTokenAddress).safeTransfer(owner, bAmount.rescale(18, decimals));
         emit RemoveLiquidity(owner, bTokenId, bAmount);
@@ -307,13 +330,14 @@ contract PerpetualPool is IPerpetualPool {
 
         if (amount >= margin) {
             bAmount = margin.itou();
+            _protocolFeeCollected += margin - margin.reformat(_decimals0);
             margin = 0;
         } else {
             margin -= amount;
         }
         pToken.updateMargin(owner, bTokenId, margin);
 
-        require(_getTraderMarginRatio(owner, blength, slength) >= _minInitialMarginRatio, 'insufficient margin');
+        require(_getTraderMarginRatio(owner, blength, slength) >= _minInitialMarginRatio, 'IM');
 
         IERC20(b.bTokenAddress).safeTransfer(owner, bAmount.rescale(18, decimals));
         emit RemoveMargin(owner, bTokenId, bAmount);
@@ -351,7 +375,7 @@ contract PerpetualPool is IPerpetualPool {
         p.cost += params.curCost - params.realizedCost;
         p.lastCumulativeFundingRate = s.cumulativeFundingRate;
         IPToken(_pTokenAddress).updateMargin(
-            owner, 0, IPToken(_pTokenAddress).getMargin(owner, 0) + (-params.fee - params.realizedCost).reformat(_decimals0)
+            owner, 0, IPToken(_pTokenAddress).getMargin(owner, 0) - params.fee - params.realizedCost
         );
         IPToken(_pTokenAddress).updatePosition(owner, symbolId, p);
 
@@ -363,8 +387,8 @@ contract PerpetualPool is IPerpetualPool {
 
         (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
         _distributePnlToBTokens(params.fee - params.protocolFee, totalDynamicEquity, dynamicEquities, blength);
-        require(_getPoolMarginRatio(totalDynamicEquity, slength) >= _minPoolMarginRatio, 'pool insufficient liquidity');
-        require(_getTraderMarginRatio(owner, blength, slength) >= _minInitialMarginRatio, 'insufficient margin');
+        require(_getPoolMarginRatio(totalDynamicEquity, slength) >= _minPoolMarginRatio, 'IL');
+        require(_getTraderMarginRatio(owner, blength, slength) >= _minInitialMarginRatio, 'IM');
 
         emit Trade(owner, symbolId, tradeVolume, s.price.itou());
     }
@@ -372,7 +396,7 @@ contract PerpetualPool is IPerpetualPool {
     function liquidate(address liquidator, address owner, uint256 blength, uint256 slength) public override _router_ _lock_ {
         _update(blength, slength);
         _settleTraderFundingFee(owner, slength);
-        require(_getTraderMarginRatio(owner, blength, slength) < _minMaintenanceMarginRatio, 'cannot liquidate');
+        require(_getTraderMarginRatio(owner, blength, slength) < _minMaintenanceMarginRatio, 'NOL');
 
         IPToken pToken = IPToken(_pTokenAddress);
         IPToken.Position[] memory positions = pToken.getPositions(owner);
@@ -459,7 +483,7 @@ contract PerpetualPool is IPerpetualPool {
             for (uint256 i = 0; i < blength; i++) {
                 if (dynamicEquities[i] > 0) {
                     BTokenInfo storage b = _bTokens[i];
-                    int256 distributedPnl = (pnl * dynamicEquities[i] / totalDynamicEquity).reformat(_decimals0);
+                    int256 distributedPnl = pnl * dynamicEquities[i] / totalDynamicEquity;
                     b.pnl += distributedPnl;
                     b.cumulativePnl += distributedPnl * ONE / b.liquidity;
                 }
@@ -490,7 +514,7 @@ contract PerpetualPool is IPerpetualPool {
     }
 
     function _getBToken0Ratio(int256 totalDynamicEquity, int256[] memory dynamicEquities) internal pure returns (int256) {
-        return totalDynamicEquity == 0 ? int256(0) : dynamicEquities[0] * ONE / totalDynamicEquity;
+        return totalDynamicEquity == 0 ? type(int256).max : dynamicEquities[0] * ONE / totalDynamicEquity;
     }
 
     function _getPoolMarginRatio(int256 totalDynamicEquity, uint256 slength) internal view returns (int256) {
@@ -526,7 +550,7 @@ contract PerpetualPool is IPerpetualPool {
             }
         }
         if (funding != 0) {
-            int256 margin = pToken.getMargin(owner, 0) - funding.reformat(_decimals0);
+            int256 margin = pToken.getMargin(owner, 0) - funding;
             pToken.updateMargin(owner, 0, margin);
         }
     }
@@ -539,7 +563,9 @@ contract PerpetualPool is IPerpetualPool {
             uint256 amountBX;
             for (uint256 i = blength - 1; i > 0; i--) {
                 if (margins[i] > 0) {
-                    (amountB0, amountBX) = IBTokenSwapper(_bTokens[i].swapperAddress).swapQuoteForExactBase((-margins[0]).itou(), margins[i].itou());
+                    (amountB0, amountBX) = IBTokenSwapper(_bTokens[i].swapperAddress).swapQuoteForExactBase(
+                        (-margins[0]).ceil(_decimals0).itou(), margins[i].itou()
+                    );
                     margins[0] += amountB0.utoi();
                     margins[i] -= amountBX.utoi();
                 }
