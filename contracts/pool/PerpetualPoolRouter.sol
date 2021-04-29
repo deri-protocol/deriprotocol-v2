@@ -63,6 +63,10 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
         IPerpetualPool(_pool).executePoolMigration(sourcePool);
     }
 
+    function collectProtocolFee() public override _controller_ {
+        IPerpetualPool(_pool).collectProtocolFee(msg.sender);
+    }
+
     function addBToken(
         address bTokenAddress,
         address swapperAddress,
