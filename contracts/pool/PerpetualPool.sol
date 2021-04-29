@@ -8,7 +8,6 @@ import '../interface/IBTokenSwapper.sol';
 import '../interface/IPToken.sol';
 import '../interface/ILToken.sol';
 import '../interface/IPerpetualPool.sol';
-import '../interface/ILiquidatorQualifier.sol';
 import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
 

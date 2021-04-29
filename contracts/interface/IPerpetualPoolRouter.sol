@@ -65,16 +65,16 @@ interface IPerpetualPoolRouter is IMigratable {
 
     function liquidate(address owner) external;
 
-    function addLiquidity(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external;
+    function addLiquidityWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external;
 
-    function removeLiquidity(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external;
+    function removeLiquidityWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external;
 
-    function addMargin(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external;
+    function addMarginWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external;
 
-    function removeMargin(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external;
+    function removeMarginWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external;
 
-    function trade(uint256 symbolId, int256 tradeVolume, PriceInfo[] memory infos) external;
+    function tradeWithPrices(uint256 symbolId, int256 tradeVolume, PriceInfo[] memory infos) external;
 
-    function liquidate(address owner, PriceInfo[] memory infos) external;
+    function liquidateWithPrices(address owner, PriceInfo[] memory infos) external;
 
 }

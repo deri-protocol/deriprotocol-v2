@@ -193,32 +193,32 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
     // Interactions Set2
     //================================================================================
 
-    function addLiquidity(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {
+    function addLiquidityWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {
         _updateSymbolOracles(infos);
         addLiquidity(bTokenId, bAmount);
     }
 
-    function removeLiquidity(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {
+    function removeLiquidityWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {
         _updateSymbolOracles(infos);
         removeLiquidity(bTokenId, bAmount);
     }
 
-    function addMargin(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {
+    function addMarginWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {
         _updateSymbolOracles(infos);
         addMargin(bTokenId, bAmount);
     }
 
-    function removeMargin(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {
+    function removeMarginWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {
         _updateSymbolOracles(infos);
         removeMargin(bTokenId, bAmount);
     }
 
-    function trade(uint256 symbolId, int256 tradeVolume, PriceInfo[] memory infos) public override {
+    function tradeWithPrices(uint256 symbolId, int256 tradeVolume, PriceInfo[] memory infos) public override {
         _updateSymbolOracles(infos);
         trade(symbolId, tradeVolume);
     }
 
-    function liquidate(address owner, PriceInfo[] memory infos) public override {
+    function liquidateWithPrices(address owner, PriceInfo[] memory infos) public override {
         _updateSymbolOracles(infos);
         liquidate(owner);
     }
