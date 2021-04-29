@@ -15,13 +15,13 @@ import '../library/SafeERC20.sol';
 
 Revert Code:
 
-    RE:     reentry
-    OR:     can only called by router
-    WD:     wrong decimals
-    IB0:    insufficient bToken0
-    IL:     pool insufficient liquidity
-    IM:     trader insufficient margin
-    NOL:    cannot liquidate
+reentry         : reentry is blocked
+router only     : can only called by router
+wrong dec       : wrong bToken decimals
+insuf't b0      : pool insufficient bToken0
+insuf't liq     : pool insufficient liquidity
+insuf't margin  : trader insufficient margin
+cant liquidate  : cannot liquidate trader
 
 */
 
@@ -56,14 +56,14 @@ contract PerpetualPool is IPerpetualPool {
 
     bool private _mutex;
     modifier _lock_() {
-        require(!_mutex, 'RE');
+        require(!_mutex, 'reentry');
         _mutex = true;
         _;
         _mutex = false;
     }
 
     modifier _router_() {
-        require(msg.sender == _routerAddress, 'OR');
+        require(msg.sender == _routerAddress, 'router only');
         _;
     }
 
@@ -155,7 +155,7 @@ contract PerpetualPool is IPerpetualPool {
             IERC20(_bTokens[0].bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
             IERC20(info.bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
         } else {
-            require(info.decimals == _decimals0, 'WD');
+            require(info.decimals == _decimals0, 'wrong dec');
             info.price = ONE;
         }
         _bTokens.push(info);
@@ -239,7 +239,7 @@ contract PerpetualPool is IPerpetualPool {
         lToken.updateAsset(owner, bTokenId, asset);
 
         (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
-        require(_getBToken0Ratio(totalDynamicEquity, dynamicEquities) >= _minBToken0Ratio, 'IB0');
+        require(_getBToken0Ratio(totalDynamicEquity, dynamicEquities) >= _minBToken0Ratio, "insuf't b0");
 
         emit AddLiquidity(owner, bTokenId, bAmount);
     }
@@ -294,9 +294,8 @@ contract PerpetualPool is IPerpetualPool {
         lToken.updateAsset(owner, bTokenId, asset);
         } // scope end
 
-        (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
-        require(_getBToken0Ratio(totalDynamicEquity, dynamicEquities) >= _minBToken0Ratio, 'IB0');
-        require(_getPoolMarginRatio(totalDynamicEquity, slength) >= _minPoolMarginRatio, 'IL');
+        (int256 totalDynamicEquity, ) = _getBTokenDynamicEquities(blength);
+        require(_getPoolMarginRatio(totalDynamicEquity, slength) >= _minPoolMarginRatio, "insuf't liq");
 
         IERC20(b.bTokenAddress).safeTransfer(owner, bAmount.rescale(18, decimals));
         emit RemoveLiquidity(owner, bTokenId, bAmount);
@@ -337,7 +336,7 @@ contract PerpetualPool is IPerpetualPool {
         }
         pToken.updateMargin(owner, bTokenId, margin);
 
-        require(_getTraderMarginRatio(owner, blength, slength) >= _minInitialMarginRatio, 'IM');
+        require(_getTraderMarginRatio(owner, blength, slength) >= _minInitialMarginRatio, "insuf't margin");
 
         IERC20(b.bTokenAddress).safeTransfer(owner, bAmount.rescale(18, decimals));
         emit RemoveMargin(owner, bTokenId, bAmount);
@@ -387,8 +386,8 @@ contract PerpetualPool is IPerpetualPool {
 
         (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
         _distributePnlToBTokens(params.fee - params.protocolFee, totalDynamicEquity, dynamicEquities, blength);
-        require(_getPoolMarginRatio(totalDynamicEquity, slength) >= _minPoolMarginRatio, 'IL');
-        require(_getTraderMarginRatio(owner, blength, slength) >= _minInitialMarginRatio, 'IM');
+        require(_getPoolMarginRatio(totalDynamicEquity, slength) >= _minPoolMarginRatio, "insuf't liq");
+        require(_getTraderMarginRatio(owner, blength, slength) >= _minInitialMarginRatio, "insuf't margin");
 
         emit Trade(owner, symbolId, tradeVolume, s.price.itou());
     }
@@ -396,7 +395,7 @@ contract PerpetualPool is IPerpetualPool {
     function liquidate(address liquidator, address owner, uint256 blength, uint256 slength) public override _router_ _lock_ {
         _update(blength, slength);
         _settleTraderFundingFee(owner, slength);
-        require(_getTraderMarginRatio(owner, blength, slength) < _minMaintenanceMarginRatio, 'NOL');
+        require(_getTraderMarginRatio(owner, blength, slength) < _minMaintenanceMarginRatio, 'cant liquidate');
 
         IPToken pToken = IPToken(_pTokenAddress);
         IPToken.Position[] memory positions = pToken.getPositions(owner);
