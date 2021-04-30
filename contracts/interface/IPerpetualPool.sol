@@ -57,7 +57,8 @@ interface IPerpetualPool {
     function getAddresses() external view returns (
         address lTokenAddress,
         address pTokenAddress,
-        address routerAddress
+        address routerAddress,
+        address protocolFeeCollector
     );
 
     function getLength() external view returns (uint256, uint256);
@@ -70,9 +71,9 @@ interface IPerpetualPool {
 
     function getSymbolOracle(uint256 symbolId) external view returns (address);
 
-    function getProtocolFeeCollected() external view returns (uint256);
+    function getProtocolFeeAccrued() external view returns (uint256);
 
-    function collectProtocolFee(address collector) external;
+    function collectProtocolFee() external;
 
     function addBToken(BTokenInfo memory info) external;
 

@@ -26,6 +26,7 @@ contract SymbolOracleWoo is IOracle {
         delayAllowance = delayAllowance_;
     }
 
+    // get price using the WooTrade on-chain oracle
     function getPrice() public override view returns (uint256) {
         (, uint256 price, bool isValid, bool isStale, uint256 timestamp) = IWooOracle(oracle).getPrice(token);
         require(isValid && !isStale && block.timestamp - timestamp <= delayAllowance,

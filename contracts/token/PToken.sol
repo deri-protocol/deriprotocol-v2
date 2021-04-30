@@ -13,8 +13,9 @@ contract PToken is IPToken, ERC721 {
 
     address _pool;
 
+    // total number of PToken ever minted, this number will never decease
     uint256 _totalMinted;
-
+    // total PTokens hold by all traders
     uint256 _totalSupply;
 
     uint256 _numSymbols;

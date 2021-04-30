@@ -23,6 +23,7 @@ abstract contract Ownable is IOwnable {
         _newController = newController;
     }
 
+    // a claim step is needed to prevent set controller to a wrong address and forever lost control
     function claimNewController() public override {
         require(msg.sender == _newController, 'Ownable: not allowed');
         _controller = _newController;

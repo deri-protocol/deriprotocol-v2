@@ -24,6 +24,8 @@ contract SymbolOracleOffChain is IOracleWithUpdate {
         return price;
     }
 
+    // update oracle price using off chain signed price
+    // the signature must be verified in order for the price to be updated
     function updatePrice(uint256 timestamp_, uint256 price_, uint8 v_, bytes32 r_, bytes32 s_) public override {
         uint256 curTimestamp = timestamp;
         if (timestamp_ > curTimestamp) {

@@ -47,9 +47,10 @@ contract PerpetualPool is IPerpetualPool {
     address immutable _lTokenAddress;
     address immutable _pTokenAddress;
     address immutable _routerAddress;
+    address immutable _protocolFeeCollector;
 
     uint256 _lastUpdateBlock;
-    int256  _protocolFeeCollected;
+    int256  _protocolFeeAccrued;
 
     BTokenInfo[] _bTokens;   // bTokenId indexed
     SymbolInfo[] _symbols;   // symbolId indexed
@@ -67,7 +68,7 @@ contract PerpetualPool is IPerpetualPool {
         _;
     }
 
-    constructor (uint256[9] memory parameters, address[3] memory addresses) {
+    constructor (uint256[9] memory parameters, address[4] memory addresses) {
         _decimals0 = parameters[0];
         _minBToken0Ratio = int256(parameters[1]);
         _minPoolMarginRatio = int256(parameters[2]);
@@ -81,6 +82,7 @@ contract PerpetualPool is IPerpetualPool {
         _lTokenAddress = addresses[0];
         _pTokenAddress = addresses[1];
         _routerAddress = addresses[2];
+        _protocolFeeCollector = addresses[3];
     }
 
     function getParameters() public override view returns (
@@ -108,11 +110,13 @@ contract PerpetualPool is IPerpetualPool {
     function getAddresses() public override view returns (
         address lTokenAddress,
         address pTokenAddress,
-        address routerAddress
+        address routerAddress,
+        address protocolFeeCollector
     ) {
         lTokenAddress = _lTokenAddress;
         pTokenAddress = _pTokenAddress;
         routerAddress = _routerAddress;
+        protocolFeeCollector = _protocolFeeCollector;
     }
 
     function getLength() public override view returns (uint256, uint256) {
@@ -135,23 +139,24 @@ contract PerpetualPool is IPerpetualPool {
         return _symbols[symbolId].oracleAddress;
     }
 
-    function getProtocolFeeCollected() public override view returns (uint256) {
-        return uint256(_protocolFeeCollected);
+    function getProtocolFeeAccrued() public override view returns (uint256) {
+        return uint256(_protocolFeeAccrued);
     }
 
-    function collectProtocolFee(address collector) public override _router_ {
+    function collectProtocolFee() public override {
         IERC20 token = IERC20(_bTokens[0].bTokenAddress);
-        uint256 amount = uint256(_protocolFeeCollected).rescale(18, _decimals0);
+        uint256 amount = uint256(_protocolFeeAccrued).rescale(18, _decimals0);
         if (amount < token.balanceOf(address(this))) {
             amount = token.balanceOf(address(this));
         }
-        token.safeTransfer(collector, amount);
-        _protocolFeeCollected = 0;
-        emit ProtocolFeeCollection(collector, amount.rescale(_decimals0, 18));
+        token.safeTransfer(_protocolFeeCollector, amount);
+        _protocolFeeAccrued = 0;
+        emit ProtocolFeeCollection(_protocolFeeCollector, amount.rescale(_decimals0, 18));
     }
 
     function addBToken(BTokenInfo memory info) public override _router_ {
         if (_bTokens.length > 0) {
+            // approve for non bToken0 swappers
             IERC20(_bTokens[0].bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
             IERC20(info.bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
         } else {
@@ -168,7 +173,6 @@ contract PerpetualPool is IPerpetualPool {
         IPToken(_pTokenAddress).setNumSymbols(_symbols.length);
     }
 
-    /// low-level function called from router which should perform critical checks
     function setBTokenParameters(uint256 bTokenId, address swapperAddress, address oracleAddress, uint256 discount) public override _router_ {
         BTokenInfo storage b = _bTokens[bTokenId];
         b.swapperAddress = swapperAddress;
@@ -176,7 +180,6 @@ contract PerpetualPool is IPerpetualPool {
         b.discount = int256(discount);
     }
 
-    /// low-level function called from router which should perform critical checks
     function setSymbolParameters(uint256 symbolId, address oracleAddress, uint256 feeRatio, uint256 fundingRateCoefficient) public override _router_ {
         SymbolInfo storage s = _symbols[symbolId];
         s.oracleAddress = oracleAddress;
@@ -184,6 +187,7 @@ contract PerpetualPool is IPerpetualPool {
         s.fundingRateCoefficient = int256(fundingRateCoefficient);
     }
 
+    // during a migration, this function is intended to be called in the source pool
     function approvePoolMigration(address targetPool) public override _router_ {
         for (uint256 i = 0; i < _bTokens.length; i++) {
             IERC20(_bTokens[i].bTokenAddress).safeApprove(targetPool, type(uint256).max);
@@ -192,6 +196,7 @@ contract PerpetualPool is IPerpetualPool {
         IPToken(_pTokenAddress).setPool(targetPool);
     }
 
+    // during a migration, this function is intended to be called in the target pool
     function executePoolMigration(address sourcePool) public override _router_ {
         (uint256 blength, uint256 slength) = IPerpetualPool(sourcePool).getLength();
         for (uint256 i = 0; i < blength; i++) {
@@ -202,7 +207,7 @@ contract PerpetualPool is IPerpetualPool {
         for (uint256 i = 0; i < slength; i++) {
             _symbols.push(IPerpetualPool(sourcePool).getSymbol(i));
         }
-        _protocolFeeCollected = int256(IPerpetualPool(sourcePool).getProtocolFeeCollected());
+        _protocolFeeAccrued = int256(IPerpetualPool(sourcePool).getProtocolFeeAccrued());
     }
 
 
@@ -227,7 +232,7 @@ contract PerpetualPool is IPerpetualPool {
         if (bTokenId == 0) {
             delta = bAmount.utoi() + pnl.reformat(_decimals0);
             b.pnl -= pnl; // this pnl comes from b.pnl, thus should be deducted from b.pnl
-            _protocolFeeCollected += pnl - pnl.reformat(_decimals0); // deal with accuracy tail
+            _protocolFeeAccrued += pnl - pnl.reformat(_decimals0); // deal with accuracy tail
         } else {
             delta = bAmount.utoi();
             asset.pnl += pnl;
@@ -262,7 +267,7 @@ contract PerpetualPool is IPerpetualPool {
         if (bTokenId == 0) {
             deltaLiquidity = pnl.reformat(_decimals0);
             deltaPnl = -pnl;
-            _protocolFeeCollected += pnl - pnl.reformat(_decimals0);
+            _protocolFeeAccrued += pnl - pnl.reformat(_decimals0);
         } else {
             asset.pnl += pnl;
             if (asset.pnl < 0) {
@@ -276,7 +281,7 @@ contract PerpetualPool is IPerpetualPool {
                 (, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapExactBaseForQuote(asset.pnl.itou());
                 deltaLiquidity = amountBX.utoi();
                 deltaPnl = -asset.pnl;
-                _protocolFeeCollected += asset.pnl - asset.pnl.reformat(_decimals0);
+                _protocolFeeAccrued += asset.pnl - asset.pnl.reformat(_decimals0);
                 asset.pnl = 0;
             }
         }
@@ -329,7 +334,7 @@ contract PerpetualPool is IPerpetualPool {
 
         if (amount >= margin) {
             bAmount = margin.itou();
-            _protocolFeeCollected += margin - margin.reformat(_decimals0);
+            _protocolFeeAccrued += margin - margin.reformat(_decimals0);
             margin = 0;
         } else {
             margin -= amount;
@@ -342,6 +347,7 @@ contract PerpetualPool is IPerpetualPool {
         emit RemoveMargin(owner, bTokenId, bAmount);
     }
 
+    // struct for temp use in trade function, to prevent stack too deep error
     struct TradeParams {
         int256 curCost;
         int256 fee;
@@ -382,7 +388,7 @@ contract PerpetualPool is IPerpetualPool {
         s.tradersNetCost += params.curCost - params.realizedCost;
 
         params.protocolFee = params.fee * _protocolFeeCollectRatio / ONE;
-        _protocolFeeCollected += params.protocolFee;
+        _protocolFeeAccrued += params.protocolFee;
 
         (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
         _distributePnlToBTokens(params.fee - params.protocolFee, totalDynamicEquity, dynamicEquities, blength);
@@ -490,6 +496,8 @@ contract PerpetualPool is IPerpetualPool {
         }
     }
 
+    // update symbol prices and calculate funding and unrealized pnl for all positions since last call
+    // the returned undistributedPnl will be distributed and shared by all LPs
     function _updateSymbolPrices(int256 totalDynamicEquity, uint256 slength) internal returns (int256) {
         if (totalDynamicEquity <= 0) return 0;
         int256 undistributedPnl;
@@ -530,8 +538,8 @@ contract PerpetualPool is IPerpetualPool {
         return totalCost == 0 ? type(int256).max : totalDynamicEquity * ONE / totalCost.abs();
     }
 
-    // setting funding fee trader's side
-    // this funding fee is already settled to bTokens in `_update`
+    // setting funding fee on trader's side
+    // this funding fee is already settled to bTokens in `_update`, thus distribution is not needed
     function _settleTraderFundingFee(address owner, uint256 slength) internal {
         IPToken pToken = IPToken(_pTokenAddress);
         int256 funding;

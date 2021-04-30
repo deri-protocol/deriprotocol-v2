@@ -14,7 +14,9 @@ abstract contract BTokenSwapper is IBTokenSwapper {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
+    // address of the quoted token, e.x. WETH
     address public immutable quote;
+    // address of the base token, this is the base0 token (settlement token) of PerpetualPool, e.x. USDT
     address public immutable base;
     uint256 public immutable qDecimals;
     uint256 public immutable bDecimals;
@@ -26,6 +28,7 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         bDecimals = IERC20(base_).decimals();
     }
 
+    // swap exact amount of base token `amountB` for quote token
     function swapExactBaseForQuote(uint256 amountB) public override returns (uint256 resultB, uint256 resultQ) {
         address caller = msg.sender;
 
@@ -42,6 +45,7 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         resultQ = (q2 - q1).rescale(qDecimals, 18);
     }
 
+    // swap exact amount of quote token `amountQ` for base token
     function swapExactQuoteForBase(uint256 amountQ) public override returns (uint256 resultB, uint256 resultQ) {
         address caller = msg.sender;
 
@@ -58,6 +62,9 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         resultQ = amountQ.rescale(qDecimals, 18);
     }
 
+    // swap max amount of base token `amountB` for exact amount of quote token `amountQ`
+    // in case `amountB` is sufficient enough, the remains will be sent back
+    // in case `amountB` is insufficient, it will be used up to swap for quote token
     function swapBaseForExactQuote(uint256 amountB, uint256 amountQ) public override returns (uint256 resultB, uint256 resultQ) {
         address caller = msg.sender;
 
@@ -86,6 +93,9 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         resultQ = (q2 - q1).rescale(qDecimals, 18);
     }
 
+    // swap max amount of quote token `amountQ` for exact amount of base token `amountB`
+    // in case `amountQ` if sufficient enough, the remains will be sent back
+    // in case `amountB` is insufficient, it will be used up to swap for base token
     function swapQuoteForExactBase(uint256 amountB, uint256 amountQ) public override returns (uint256 resultB, uint256 resultQ) {
         address caller = msg.sender;
 
@@ -114,6 +124,10 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         resultQ = (q1 - q2).rescale(qDecimals, 18);
     }
 
+    // in case someone send base/quote tokens to this contract,
+    // the previous functions might be blocked
+    // anyone can call this function to withdraw any remaining base/quote tokens in this contract
+    // idealy, this contract should have no balance for base/quote tokens
     function sync() public override {
         IERC20 b = IERC20(base);
         IERC20 q = IERC20(quote);
@@ -123,12 +137,16 @@ abstract contract BTokenSwapper is IBTokenSwapper {
 
     //================================================================================
 
+    // estimate the base token amount needed to swap for `quoteAmountOut` quote tokens
     function _getBaseAmountIn(uint256 quoteAmountOut) internal virtual view returns (uint256);
 
+    // estimate the quote token amount needed to swap for `baseAmountOut` base tokens
     function _getQuoteAmountIn(uint256 baseAmountOut) internal virtual view returns (uint256);
 
+    // low-level swap function
     function _swapExactTokensForTokens(address a, address b, address to) internal virtual;
 
+    // low-level swap function
     function _swapTokensForExactTokens(address a, address b, uint256 amount, address to) internal virtual;
 
 }

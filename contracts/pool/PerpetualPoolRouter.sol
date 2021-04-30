@@ -46,12 +46,14 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
         _liquidatorQualifierAddress = qualifierAddress;
     }
 
+    // during a migration, this function is intended to be called in the source router
     function approveMigration() public override _controller_ {
         require(_migrationTimestamp != 0 && block.timestamp >= _migrationTimestamp, 'migration time not met');
         address targetPool = IPerpetualPoolRouter(_migrationDestination).pool();
         IPerpetualPool(_pool).approvePoolMigration(targetPool);
     }
 
+    // during a migration, this function is intended to be called in the target router
     function executeMigration(address sourceRouter) public override _controller_ {
         uint256 migrationTimestamp_ = IPerpetualPoolRouter(sourceRouter).migrationTimestamp();
         address migrationDestination_ = IPerpetualPoolRouter(sourceRouter).migrationDestination();
@@ -61,10 +63,6 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
 
         address sourcePool = IPerpetualPoolRouter(sourceRouter).pool();
         IPerpetualPool(_pool).executePoolMigration(sourcePool);
-    }
-
-    function collectProtocolFee() public override _controller_ {
-        IPerpetualPool(_pool).collectProtocolFee(msg.sender);
     }
 
     function addBToken(
@@ -164,7 +162,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
 
         address owner = msg.sender;
         require(bTokenId < blength, 'invalid bTokenId');
-        require(IPToken(_pTokenAddress).exists(owner), 'not trader');
+        require(IPToken(_pTokenAddress).exists(owner), 'no trade / no pos');
 
         p.removeMargin(owner, bTokenId, bAmount, blength, slength);
     }
@@ -175,7 +173,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
 
         address owner = msg.sender;
         require(symbolId < slength, 'invalid symbolId');
-        require(IPToken(_pTokenAddress).exists(owner), 'not trader');
+        require(IPToken(_pTokenAddress).exists(owner), 'no trade / no pos');
 
         p.trade(owner, symbolId, tradeVolume, blength, slength);
     }
@@ -185,7 +183,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
         (uint256 blength, uint256 slength) = p.getLength();
 
         address liquidator = msg.sender;
-        require(IPToken(_pTokenAddress).exists(owner), 'not trader');
+        require(IPToken(_pTokenAddress).exists(owner), 'no trade / no pos');
         require(_liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(_liquidatorQualifierAddress).isQualifiedLiquidator(liquidator),
                 'not qualified');
 
@@ -194,7 +192,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
 
 
     //================================================================================
-    // Interactions Set2
+    // Interactions Set2 (supporting oracles which need manual update)
     //================================================================================
 
     function addLiquidityWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {

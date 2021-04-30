@@ -56,8 +56,10 @@ contract BTokenOracle1 is IOracle {
 
         uint256 price;
         if (timestampLast1 != 0) {
+            // TWAP
             price = (priceCumulativeLast2 - priceCumulativeLast1) / (timestampLast2 - timestampLast1) * 10**(18 + qDecimals - bDecimals) / Q112;
         } else {
+            // Spot
             price = reserveB * 10**(18 + qDecimals - bDecimals) / reserveQ;
         }
 

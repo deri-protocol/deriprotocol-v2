@@ -43,6 +43,7 @@ contract BTokenSwapper2 is IBTokenSwapper, BTokenSwapper {
 
     //================================================================================
 
+    // estimate the base token amount needed to swap for `quoteAmountOut` quote tokens
     function _getBaseAmountIn(uint256 quoteAmountOut) internal override view returns (uint256) {
         uint256 reserveIn;
         uint256 reserveOut;
@@ -66,6 +67,7 @@ contract BTokenSwapper2 is IBTokenSwapper, BTokenSwapper {
         return baseAmountIn;
     }
 
+    // estimate the quote token amount needed to swap for `baseAmountOut` base tokens
     function _getQuoteAmountIn(uint256 baseAmountOut) internal override view returns (uint256) {
         uint256 reserveIn;
         uint256 reserveOut;
@@ -89,6 +91,7 @@ contract BTokenSwapper2 is IBTokenSwapper, BTokenSwapper {
         return quoteAmountIn;
     }
 
+    // low-level swap function
     function _swapExactTokensForTokens(address a, address b, address to) internal override {
         address[] memory path = new address[](3);
         path[0] = a;
@@ -104,6 +107,7 @@ contract BTokenSwapper2 is IBTokenSwapper, BTokenSwapper {
         );
     }
 
+    // low-level swap function
     function _swapTokensForExactTokens(address a, address b, uint256 amount, address to) internal override {
         address[] memory path = new address[](3);
         path[0] = a;

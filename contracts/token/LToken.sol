@@ -13,8 +13,9 @@ contract LToken is ILToken, ERC721 {
 
     address _pool;
 
+    // total LToken ever minted, this number will never decease
     uint256 _totalMinted;
-
+    // total LTokens hold by LPs
     uint256 _totalSupply;
 
     uint256 _numBTokens;

@@ -23,8 +23,6 @@ interface IPerpetualPoolRouter is IMigratable {
 
     function setLiquidatorQualifier(address qualifier) external;
 
-    function collectProtocolFee() external;
-
     function addBToken(
         address bTokenAddress,
         address swapperAddress,

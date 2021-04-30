@@ -88,7 +88,7 @@ describe('DeriV2', function () {
                 one(5, 1),  // liquidationCutRatio
                 one(2, 1)   // protocolFeeCollectRatio
             ],
-            [lToken.address, pToken.address, router.address]
+            [lToken.address, pToken.address, router.address, account1.address]
         )
         await pToken.setPool(pool.address)
         await lToken.setPool(pool.address)
@@ -196,27 +196,27 @@ describe('DeriV2', function () {
         expect(await pToken.getMargin(account3.address, 2)).to.equal(one(200))
 
         await router.connect(account3).trade(0, one(100))
-        expect(await pool.getProtocolFeeCollected()).to.equal(one(12, 3))
+        expect(await pool.getProtocolFeeAccrued()).to.equal(one(12, 3))
         expect((await pool.getSymbol(0)).tradersNetVolume).to.equal(one(100))
-        expect((await pool.getBToken(1)).pnl).to.equal(one(36571, 6))
+        expect((await pool.getBToken(1)).pnl).to.equal(one('36571428571428571', 18))
         expect(await pToken.getMargin(account3.address, 0)).to.equal(neg(one(6, 2)))
 
         await router.connect(account3).removeMargin(2, one())
-        expect(await pToken.getMargin(account3.address, 0)).to.equal(0)
-        expect(await pToken.getMargin(account3.address, 2)).to.equal(one('198996977642695826730', 0, 0))
+        expect(await pToken.getMargin(account3.address, 0)).to.equal(one('285812244800', 18))
+        expect(await pToken.getMargin(account3.address, 2)).to.equal(one('198996977592394459183', 18))
 
         await router.connect(account3).trade(1, neg(one(200)))
-        expect((await pool.getBToken(1)).pnl).to.equal(one(85462, 6))
+        expect((await pool.getBToken(1)).pnl).to.equal(one('85463945428826969', 18))
         expect((await pToken.getPosition(account3.address, 1)).volume).to.equal(neg(one(200)))
 
         await router.connect(account1).removeLiquidity(0, one(100))
-        expect((await lToken.getAsset(account1.address, 0)).lastCumulativePnl).to.equal(one(26744, 10))
+        expect((await lToken.getAsset(account1.address, 0)).lastCumulativePnl).to.equal(one('2674603159638', 18))
 
         await router.connect(account2).addLiquidity(1, one())
         await oracleBTCUSD.setPrice(one(62000))
 
         await router.connect(account2).addLiquidity(1, one())
-        expect((await lToken.getAsset(account2.address, 1)).pnl).to.equal(neg(one(15362316, 6)))
+        expect((await lToken.getAsset(account2.address, 1)).pnl).to.equal(neg(one('15362313917495867375', 18)))
     })
 
     it('migration work correctly', async function () {
@@ -237,7 +237,7 @@ describe('DeriV2', function () {
                 one(5, 1),  // liquidationCutRatio
                 one(2, 1)   // protocolFeeCollectRatio
             ],
-            [lToken.address, pToken.address, router2.address]
+            [lToken.address, pToken.address, router2.address, account1.address]
         )
         await router2.connect(account1).setPool(pool2.address)
 
@@ -261,7 +261,7 @@ describe('DeriV2', function () {
         await router2.connect(account3).trade(1, one(200))
         expect((await pToken.getPosition(account3.address, 1)).volume).to.equal(0)
         await router2.connect(account1).removeLiquidity(0, one(1000))
-        expect((await lToken.getAsset(account1.address, 0)).liquidity).to.equal(one(9000228479, 6))
+        expect((await lToken.getAsset(account1.address, 0)).liquidity).to.equal(one('9000228479000000000000', 18))
     })
 
 })
