@@ -9,93 +9,95 @@ import '../interface/IUniswapV2Router02.sol';
 import '../library/SafeERC20.sol';
 import './BTokenSwapper.sol';
 
+// Swapper using two pairs
+// E.g. swap (AAA for CCC) or (CCC for AAA) through pairs AAABBB and BBBCCC
 contract BTokenSwapper2 is IBTokenSwapper, BTokenSwapper {
 
     using SafeERC20 for IERC20;
 
     address public immutable router;
-    address public immutable pairQ;
-    address public immutable pairB;
-    address public immutable mid;
-    bool    public immutable isQuoteToken0;
-    bool    public immutable isBaseToken0;
+    address public immutable pairBX;
+    address public immutable pairB0;
+    address public immutable addressMid;
+    bool    public immutable isBXToken0;
+    bool    public immutable isB0Token0;
 
     constructor (
         address router_,
-        address pairQ_,
-        address pairB_,
-        address quote_,
-        address mid_,
-        address base_,
-        bool    isQuoteToken0_,
-        bool    isBaseToken0_
-    ) BTokenSwapper(quote_, base_) {
+        address pairBX_,
+        address pairB0_,
+        address addressBX_,
+        address addressMid_,
+        address addressB0_,
+        bool    isBXToken0_,
+        bool    isB0Token0_
+    ) BTokenSwapper(addressBX_, addressB0_) {
         router = router_;
-        pairQ = pairQ_;
-        pairB = pairB_;
-        mid = mid_;
-        isQuoteToken0 = isQuoteToken0_;
-        isBaseToken0 = isBaseToken0_;
+        pairBX = pairBX_;
+        pairB0 = pairB0_;
+        addressMid = addressMid_;
+        isBXToken0 = isBXToken0_;
+        isB0Token0 = isB0Token0_;
 
-        IERC20(quote_).safeApprove(router_, type(uint256).max);
-        IERC20(base_).safeApprove(router_, type(uint256).max);
+        IERC20(addressBX_).safeApprove(router_, type(uint256).max);
+        IERC20(addressB0_).safeApprove(router_, type(uint256).max);
     }
 
     //================================================================================
 
-    // estimate the base token amount needed to swap for `quoteAmountOut` quote tokens
-    function _getBaseAmountIn(uint256 quoteAmountOut) internal override view returns (uint256) {
+    // estimate the tokenB0 amount needed to swap for `amountOutBX` tokenBX
+    function _getAmountInB0(uint256 amountOutBX) internal override view returns (uint256) {
         uint256 reserveIn;
         uint256 reserveOut;
         uint256 amountMid;
-        uint256 baseAmountIn;
+        uint256 amountInB0;
 
-        if (isQuoteToken0) {
-            (reserveOut, reserveIn, ) = IUniswapV2Pair(pairQ).getReserves();
+        if (isBXToken0) {
+            (reserveOut, reserveIn, ) = IUniswapV2Pair(pairBX).getReserves();
         } else {
-            (reserveIn, reserveOut, ) = IUniswapV2Pair(pairQ).getReserves();
+            (reserveIn, reserveOut, ) = IUniswapV2Pair(pairBX).getReserves();
         }
-        amountMid = IUniswapV2Router02(router).getAmountIn(quoteAmountOut, reserveIn, reserveOut);
+        amountMid = IUniswapV2Router02(router).getAmountIn(amountOutBX, reserveIn, reserveOut);
 
-        if (isBaseToken0) {
-            (reserveIn, reserveOut, ) = IUniswapV2Pair(pairB).getReserves();
+        if (isB0Token0) {
+            (reserveIn, reserveOut, ) = IUniswapV2Pair(pairB0).getReserves();
         } else {
-            (reserveOut, reserveIn, ) = IUniswapV2Pair(pairB).getReserves();
+            (reserveOut, reserveIn, ) = IUniswapV2Pair(pairB0).getReserves();
         }
-        baseAmountIn = IUniswapV2Router02(router).getAmountIn(amountMid, reserveIn, reserveOut);
+        amountInB0 = IUniswapV2Router02(router).getAmountIn(amountMid, reserveIn, reserveOut);
 
-        return baseAmountIn;
+        return amountInB0;
     }
 
-    // estimate the quote token amount needed to swap for `baseAmountOut` base tokens
-    function _getQuoteAmountIn(uint256 baseAmountOut) internal override view returns (uint256) {
+    // estimate the tokenBX amount needed to swap for `amountOutB0` tokenB0
+    function _getAmountInBX(uint256 amountOutB0) internal override view returns (uint256) {
         uint256 reserveIn;
         uint256 reserveOut;
         uint256 amountMid;
-        uint256 quoteAmountIn;
+        uint256 amountInBX;
 
-        if (isBaseToken0) {
-            (reserveOut, reserveIn, ) = IUniswapV2Pair(pairB).getReserves();
+        if (isB0Token0) {
+            (reserveOut, reserveIn, ) = IUniswapV2Pair(pairB0).getReserves();
         } else {
-            (reserveIn, reserveOut, ) = IUniswapV2Pair(pairB).getReserves();
+            (reserveIn, reserveOut, ) = IUniswapV2Pair(pairB0).getReserves();
         }
-        amountMid = IUniswapV2Router02(router).getAmountIn(baseAmountOut, reserveIn, reserveOut);
+        amountMid = IUniswapV2Router02(router).getAmountIn(amountOutB0, reserveIn, reserveOut);
 
-        if (isQuoteToken0) {
-            (reserveIn, reserveOut, ) = IUniswapV2Pair(pairQ).getReserves();
+        if (isBXToken0) {
+            (reserveIn, reserveOut, ) = IUniswapV2Pair(pairBX).getReserves();
         } else {
-            (reserveOut, reserveIn, ) = IUniswapV2Pair(pairQ).getReserves();
+            (reserveOut, reserveIn, ) = IUniswapV2Pair(pairBX).getReserves();
         }
-        quoteAmountIn = IUniswapV2Router02(router).getAmountIn(amountMid, reserveIn, reserveOut);
+        amountInBX = IUniswapV2Router02(router).getAmountIn(amountMid, reserveIn, reserveOut);
 
-        return quoteAmountIn;
+        return amountInBX;
     }
 
     // low-level swap function
     function _swapExactTokensForTokens(address a, address b, address to) internal override {
         address[] memory path = new address[](3);
         path[0] = a;
-        path[1] = mid;
+        path[1] = addressMid;
         path[2] = b;
 
         IUniswapV2Router02(router).swapExactTokensForTokens(
@@ -111,7 +113,7 @@ contract BTokenSwapper2 is IBTokenSwapper, BTokenSwapper {
     function _swapTokensForExactTokens(address a, address b, uint256 amount, address to) internal override {
         address[] memory path = new address[](3);
         path[0] = a;
-        path[1] = mid;
+        path[1] = addressMid;
         path[2] = b;
 
         IUniswapV2Router02(router).swapTokensForExactTokens(

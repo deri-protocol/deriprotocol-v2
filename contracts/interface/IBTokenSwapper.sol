@@ -4,13 +4,13 @@ pragma solidity >=0.8.0 <0.9.0;
 
 interface IBTokenSwapper {
 
-    function swapExactBaseForQuote(uint256 amountB) external returns (uint256 resultB, uint256 resultQ);
+    function swapExactB0ForBX(uint256 amountB0) external returns (uint256 resultB0, uint256 resultBX);
 
-    function swapExactQuoteForBase(uint256 amountQ) external returns (uint256 resultB, uint256 resultQ);
+    function swapExactBXForB0(uint256 amountBX) external returns (uint256 resultB0, uint256 resultBX);
 
-    function swapBaseForExactQuote(uint256 amountB, uint256 amountQ) external returns (uint256 resultB, uint256 resultQ);
+    function swapB0ForExactBX(uint256 amountB0, uint256 amountBX) external returns (uint256 resultB0, uint256 resultBX);
 
-    function swapQuoteForExactBase(uint256 amountB, uint256 amountQ) external returns (uint256 resultB, uint256 resultQ);
+    function swapBXForExactB0(uint256 amountB0, uint256 amountBX) external returns (uint256 resultB0, uint256 resultBX);
 
     function sync() external;
 

@@ -6,6 +6,7 @@ import '../interface/IOracle.sol';
 import '../interface/IERC20.sol';
 import '../interface/IUniswapV2Pair.sol';
 
+// Price oracle using only one swap pair
 contract BTokenOracle1 is IOracle {
 
     uint256 constant Q112 = 2**112;

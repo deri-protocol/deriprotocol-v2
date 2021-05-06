@@ -7,24 +7,25 @@ import './ERC721.sol';
 
 contract PToken is IPToken, ERC721 {
 
+    // PToken name
     string _name;
-
+    // PToken symbol
     string _symbol;
-
+    // associative pool address
     address _pool;
-
     // total number of PToken ever minted, this number will never decease
     uint256 _totalMinted;
     // total PTokens hold by all traders
     uint256 _totalSupply;
-
+    // number of symbols
     uint256 _numSymbols;
-
+    // number of bTokens
     uint256 _numBTokens;
 
-    mapping (uint256 => mapping (uint256 => int256)) _tokenIdMargins;       // tokenId => (bTokenId => Margin)
-
-    mapping (uint256 => mapping (uint256 => Position)) _tokenIdPositions;   // tokenId => (symbolId => Position)
+    // tokenId => (bTokenId => Margin)
+    mapping (uint256 => mapping (uint256 => int256)) _tokenIdMargins;
+    // tokenId => (symbolId => Position)
+    mapping (uint256 => mapping (uint256 => Position)) _tokenIdPositions;
 
     modifier _pool_() {
         require(msg.sender == _pool, 'PToken: only pool');

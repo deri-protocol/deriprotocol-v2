@@ -14,134 +14,134 @@ abstract contract BTokenSwapper is IBTokenSwapper {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
-    // address of the quoted token, e.x. WETH
-    address public immutable quote;
-    // address of the base token, this is the base0 token (settlement token) of PerpetualPool, e.x. USDT
-    address public immutable base;
-    uint256 public immutable qDecimals;
-    uint256 public immutable bDecimals;
+    // address of the tokenBX, e.x. WETH
+    address public immutable addressBX;
+    // address of the tokenB0, this is the base0 token (settlement token) of PerpetualPool, e.x. USDT
+    address public immutable addressB0;
+    uint256 public immutable decimalsBX;
+    uint256 public immutable decimalsB0;
 
-    constructor (address quote_, address base_) {
-        quote = quote_;
-        base = base_;
-        qDecimals = IERC20(quote_).decimals();
-        bDecimals = IERC20(base_).decimals();
+    constructor (address addressBX_, address addressB0_) {
+        addressBX = addressBX_;
+        addressB0 = addressB0_;
+        decimalsBX = IERC20(addressBX_).decimals();
+        decimalsB0 = IERC20(addressB0_).decimals();
     }
 
-    // swap exact amount of base token `amountB` for quote token
-    function swapExactBaseForQuote(uint256 amountB) public override returns (uint256 resultB, uint256 resultQ) {
+    // swap exact `amountB0` amount of tokenB0 for tokenBX
+    function swapExactB0ForBX(uint256 amountB0) public override returns (uint256 resultB0, uint256 resultBX) {
         address caller = msg.sender;
 
-        IERC20 b = IERC20(base);
-        IERC20 q = IERC20(quote);
+        IERC20 tokenB0 = IERC20(addressB0);
+        IERC20 tokenBX = IERC20(addressBX);
 
-        uint256 q1 = q.balanceOf(caller);
-        amountB = amountB.rescale(18, bDecimals);
-        b.safeTransferFrom(caller, address(this), amountB);
-        _swapExactTokensForTokens(base, quote, caller);
-        uint256 q2 = q.balanceOf(caller);
+        uint256 bx1 = tokenBX.balanceOf(caller);
+        amountB0 = amountB0.rescale(18, decimalsB0);
+        tokenB0.safeTransferFrom(caller, address(this), amountB0);
+        _swapExactTokensForTokens(addressB0, addressBX, caller);
+        uint256 bx2 = tokenBX.balanceOf(caller);
 
-        resultB = amountB.rescale(bDecimals, 18);
-        resultQ = (q2 - q1).rescale(qDecimals, 18);
+        resultB0 = amountB0.rescale(decimalsB0, 18);
+        resultBX = (bx2 - bx1).rescale(decimalsBX, 18);
     }
 
-    // swap exact amount of quote token `amountQ` for base token
-    function swapExactQuoteForBase(uint256 amountQ) public override returns (uint256 resultB, uint256 resultQ) {
+    // swap exact `amountBX` amount of tokenBX token for tokenB0
+    function swapExactBXForB0(uint256 amountBX) public override returns (uint256 resultB0, uint256 resultBX) {
         address caller = msg.sender;
 
-        IERC20 b = IERC20(base);
-        IERC20 q = IERC20(quote);
+        IERC20 tokenB0 = IERC20(addressB0);
+        IERC20 tokenBX = IERC20(addressBX);
 
-        uint256 b1 = b.balanceOf(caller);
-        amountQ = amountQ.rescale(18, qDecimals);
-        q.safeTransferFrom(caller, address(this), amountQ);
-        _swapExactTokensForTokens(quote, base, caller);
-        uint256 b2 = b.balanceOf(caller);
+        uint256 b01 = tokenB0.balanceOf(caller);
+        amountBX = amountBX.rescale(18, decimalsBX);
+        tokenBX.safeTransferFrom(caller, address(this), amountBX);
+        _swapExactTokensForTokens(addressBX, addressB0, caller);
+        uint256 b02 = tokenB0.balanceOf(caller);
 
-        resultB = (b2 - b1).rescale(bDecimals, 18);
-        resultQ = amountQ.rescale(qDecimals, 18);
+        resultB0 = (b02 - b01).rescale(decimalsB0, 18);
+        resultBX = amountBX.rescale(decimalsBX, 18);
     }
 
-    // swap max amount of base token `amountB` for exact amount of quote token `amountQ`
-    // in case `amountB` is sufficient enough, the remains will be sent back
-    // in case `amountB` is insufficient, it will be used up to swap for quote token
-    function swapBaseForExactQuote(uint256 amountB, uint256 amountQ) public override returns (uint256 resultB, uint256 resultQ) {
+    // swap max amount of tokenB0 `amountB0` for exact amount of tokenBX `amountBX`
+    // in case `amountB0` is sufficient, the remains will be sent back
+    // in case `amountB0` is insufficient, it will be used up to swap for tokenBX
+    function swapB0ForExactBX(uint256 amountB0, uint256 amountBX) public override returns (uint256 resultB0, uint256 resultBX) {
         address caller = msg.sender;
 
-        IERC20 b = IERC20(base);
-        IERC20 q = IERC20(quote);
+        IERC20 tokenB0 = IERC20(addressB0);
+        IERC20 tokenBX = IERC20(addressBX);
 
-        uint256 b1 = b.balanceOf(caller);
-        uint256 q1 = q.balanceOf(caller);
+        uint256 b01 = tokenB0.balanceOf(caller);
+        uint256 bx1 = tokenBX.balanceOf(caller);
 
-        amountB = amountB.rescale(18, bDecimals);
-        amountQ = amountQ.rescale(18, qDecimals);
-        b.safeTransferFrom(caller, address(this), amountB);
-        if (amountB >= _getBaseAmountIn(amountQ) * 11 / 10) {
-            _swapTokensForExactTokens(base, quote, amountQ, caller);
+        amountB0 = amountB0.rescale(18, decimalsB0);
+        amountBX = amountBX.rescale(18, decimalsBX);
+        tokenB0.safeTransferFrom(caller, address(this), amountB0);
+        if (amountB0 >= _getAmountInB0(amountBX) * 11 / 10) {
+            _swapTokensForExactTokens(addressB0, addressBX, amountBX, caller);
         } else {
-            _swapExactTokensForTokens(base, quote, caller);
+            _swapExactTokensForTokens(addressB0, addressBX, caller);
         }
 
-        uint256 remainB = b.balanceOf(address(this));
-        if (resultB != 0) b.safeTransfer(caller, remainB);
+        uint256 remainB0 = tokenB0.balanceOf(address(this));
+        if (remainB0 != 0) tokenB0.safeTransfer(caller, remainB0);
 
-        uint256 b2 = b.balanceOf(caller);
-        uint256 q2 = q.balanceOf(caller);
+        uint256 b02 = tokenB0.balanceOf(caller);
+        uint256 bx2 = tokenBX.balanceOf(caller);
 
-        resultB = (b1 - b2).rescale(bDecimals, 18);
-        resultQ = (q2 - q1).rescale(qDecimals, 18);
+        resultB0 = (b01 - b02).rescale(decimalsB0, 18);
+        resultBX = (bx2 - bx1).rescale(decimalsBX, 18);
     }
 
-    // swap max amount of quote token `amountQ` for exact amount of base token `amountB`
-    // in case `amountQ` if sufficient enough, the remains will be sent back
-    // in case `amountB` is insufficient, it will be used up to swap for base token
-    function swapQuoteForExactBase(uint256 amountB, uint256 amountQ) public override returns (uint256 resultB, uint256 resultQ) {
+    // swap max amount of tokenBX `amountBX` for exact amount of tokenB0 `amountB0`
+    // in case `amountBX` is sufficient, the remains will be sent back
+    // in case `amountBX` is insufficient, it will be used up to swap for tokenB0
+    function swapBXForExactB0(uint256 amountB0, uint256 amountBX) public override returns (uint256 resultB0, uint256 resultBX) {
         address caller = msg.sender;
 
-        IERC20 b = IERC20(base);
-        IERC20 q = IERC20(quote);
+        IERC20 tokenB0 = IERC20(addressB0);
+        IERC20 tokenBX = IERC20(addressBX);
 
-        uint256 b1 = b.balanceOf(caller);
-        uint256 q1 = q.balanceOf(caller);
+        uint256 b01 = tokenB0.balanceOf(caller);
+        uint256 bx1 = tokenBX.balanceOf(caller);
 
-        amountB = amountB.rescale(18, bDecimals);
-        amountQ = amountQ.rescale(18, qDecimals);
-        q.safeTransferFrom(caller, address(this), amountQ);
-        if (amountQ >= _getQuoteAmountIn(amountB) * 11 / 10) {
-            _swapTokensForExactTokens(quote, base, amountB, caller);
+        amountB0 = amountB0.rescale(18, decimalsB0);
+        amountBX = amountBX.rescale(18, decimalsBX);
+        tokenBX.safeTransferFrom(caller, address(this), amountBX);
+        if (amountBX >= _getAmountInBX(amountB0) * 11 / 10) {
+            _swapTokensForExactTokens(addressBX, addressB0, amountB0, caller);
         } else {
-            _swapExactTokensForTokens(quote, base, caller);
+            _swapExactTokensForTokens(addressBX, addressB0, caller);
         }
 
-        uint256 remainQ = q.balanceOf(address(this));
-        if (remainQ != 0) q.safeTransfer(caller, remainQ);
+        uint256 remainBX = tokenBX.balanceOf(address(this));
+        if (remainBX != 0) tokenBX.safeTransfer(caller, remainBX);
 
-        uint256 b2 = b.balanceOf(caller);
-        uint256 q2 = q.balanceOf(caller);
+        uint256 b02 = tokenB0.balanceOf(caller);
+        uint256 bx2 = tokenBX.balanceOf(caller);
 
-        resultB = (b2 - b1).rescale(bDecimals, 18);
-        resultQ = (q1 - q2).rescale(qDecimals, 18);
+        resultB0 = (b02 - b01).rescale(decimalsB0, 18);
+        resultBX = (bx1 - bx2).rescale(decimalsBX, 18);
     }
 
-    // in case someone send base/quote tokens to this contract,
+    // in case someone send tokenB0/tokenBX to this contract,
     // the previous functions might be blocked
-    // anyone can call this function to withdraw any remaining base/quote tokens in this contract
-    // idealy, this contract should have no balance for base/quote tokens
+    // anyone can call this function to withdraw any remaining tokenB0/tokenBX in this contract
+    // idealy, this contract should have no balance for tokenB0/tokenBX
     function sync() public override {
-        IERC20 b = IERC20(base);
-        IERC20 q = IERC20(quote);
-        if (b.balanceOf(address(this)) != 0) b.safeTransfer(msg.sender, b.balanceOf(address(this)));
-        if (q.balanceOf(address(this)) != 0) q.safeTransfer(msg.sender, q.balanceOf(address(this)));
+        IERC20 tokenB0 = IERC20(addressB0);
+        IERC20 tokenBX = IERC20(addressBX);
+        if (tokenB0.balanceOf(address(this)) != 0) tokenB0.safeTransfer(msg.sender, tokenB0.balanceOf(address(this)));
+        if (tokenBX.balanceOf(address(this)) != 0) tokenBX.safeTransfer(msg.sender, tokenBX.balanceOf(address(this)));
     }
 
     //================================================================================
 
-    // estimate the base token amount needed to swap for `quoteAmountOut` quote tokens
-    function _getBaseAmountIn(uint256 quoteAmountOut) internal virtual view returns (uint256);
+    // estimate the tokenB0 amount needed to swap for `amountOutBX` tokenBX
+    function _getAmountInB0(uint256 amountOutBX) internal virtual view returns (uint256);
 
-    // estimate the quote token amount needed to swap for `baseAmountOut` base tokens
-    function _getQuoteAmountIn(uint256 baseAmountOut) internal virtual view returns (uint256);
+    // estimate the tokenBX amount needed to swap for `amountOutB0` tokenB0
+    function _getAmountInBX(uint256 amountOutB0) internal virtual view returns (uint256);
 
     // low-level swap function
     function _swapExactTokensForTokens(address a, address b, address to) internal virtual;

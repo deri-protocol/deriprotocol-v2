@@ -38,20 +38,20 @@ interface IPerpetualPool {
 
     event Trade(address indexed owner, uint256 indexed symbolId, int256 tradeVolume, uint256 price);
 
-    event Liquidate(address indexed owner, address liquidator, uint256 reward);
+    event Liquidate(address indexed owner, address indexed liquidator, uint256 reward);
 
     event ProtocolFeeCollection(address indexed collector, uint256 amount);
 
     function getParameters() external view returns (
         uint256 decimals0,
-        uint256 minBToken0Ratio,
-        uint256 minPoolMarginRatio,
-        uint256 minInitialMarginRatio,
-        uint256 minMaintenanceMarginRatio,
-        uint256 minLiquidationReward,
-        uint256 maxLiquidationReward,
-        uint256 liquidationCutRatio,
-        uint256 protocolFeeCollectRatio
+        int256  minBToken0Ratio,
+        int256  minPoolMarginRatio,
+        int256  minInitialMarginRatio,
+        int256  minMaintenanceMarginRatio,
+        int256  minLiquidationReward,
+        int256  maxLiquidationReward,
+        int256  liquidationCutRatio,
+        int256  protocolFeeCollectRatio
     );
 
     function getAddresses() external view returns (
@@ -61,7 +61,7 @@ interface IPerpetualPool {
         address protocolFeeCollector
     );
 
-    function getLength() external view returns (uint256, uint256);
+    function getLengths() external view returns (uint256, uint256);
 
     function getBToken(uint256 bTokenId) external view returns (BTokenInfo memory);
 
@@ -71,7 +71,7 @@ interface IPerpetualPool {
 
     function getSymbolOracle(uint256 symbolId) external view returns (address);
 
-    function getProtocolFeeAccrued() external view returns (uint256);
+    function getProtocolFeeAccrued() external view returns (int256);
 
     function collectProtocolFee() external;
 

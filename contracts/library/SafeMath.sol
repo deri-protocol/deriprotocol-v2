@@ -48,7 +48,7 @@ library SafeMath {
         return decimals == 18 ? a : rescale(rescale(a, 18, decimals), decimals, 18);
     }
 
-    /// ceiling value away from zero, return in 10**18 based
+    /// ceiling value away from zero, return a valid 10**decimals base value, but still in 10**18 based
     function ceil(int256 a, uint256 decimals) internal pure returns (int256) {
         if (reformat(a, decimals) == a) {
             return a;

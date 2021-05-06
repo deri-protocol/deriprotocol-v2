@@ -12,7 +12,6 @@ import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
 
 /*
-
 Revert Code:
 
 reentry         : reentry is blocked
@@ -22,7 +21,6 @@ insuf't b0      : pool insufficient bToken0
 insuf't liq     : pool insufficient liquidity
 insuf't margin  : trader insufficient margin
 cant liquidate  : cannot liquidate trader
-
 */
 
 contract PerpetualPool is IPerpetualPool {
@@ -87,24 +85,24 @@ contract PerpetualPool is IPerpetualPool {
 
     function getParameters() public override view returns (
         uint256 decimals0,
-        uint256 minBToken0Ratio,
-        uint256 minPoolMarginRatio,
-        uint256 minInitialMarginRatio,
-        uint256 minMaintenanceMarginRatio,
-        uint256 minLiquidationReward,
-        uint256 maxLiquidationReward,
-        uint256 liquidationCutRatio,
-        uint256 protocolFeeCollectRatio
+        int256  minBToken0Ratio,
+        int256  minPoolMarginRatio,
+        int256  minInitialMarginRatio,
+        int256  minMaintenanceMarginRatio,
+        int256  minLiquidationReward,
+        int256  maxLiquidationReward,
+        int256  liquidationCutRatio,
+        int256  protocolFeeCollectRatio
     ) {
         decimals0 = _decimals0;
-        minBToken0Ratio = uint256(_minBToken0Ratio);
-        minPoolMarginRatio = uint256(_minPoolMarginRatio);
-        minInitialMarginRatio = uint256(_minInitialMarginRatio);
-        minMaintenanceMarginRatio = uint256(_minMaintenanceMarginRatio);
-        minLiquidationReward = uint256(_minLiquidationReward);
-        maxLiquidationReward = uint256(_maxLiquidationReward);
-        liquidationCutRatio = uint256(_liquidationCutRatio);
-        protocolFeeCollectRatio = uint256(_protocolFeeCollectRatio);
+        minBToken0Ratio = _minBToken0Ratio;
+        minPoolMarginRatio = _minPoolMarginRatio;
+        minInitialMarginRatio = _minInitialMarginRatio;
+        minMaintenanceMarginRatio = _minMaintenanceMarginRatio;
+        minLiquidationReward = _minLiquidationReward;
+        maxLiquidationReward = _maxLiquidationReward;
+        liquidationCutRatio = _liquidationCutRatio;
+        protocolFeeCollectRatio = _protocolFeeCollectRatio;
     }
 
     function getAddresses() public override view returns (
@@ -119,7 +117,7 @@ contract PerpetualPool is IPerpetualPool {
         protocolFeeCollector = _protocolFeeCollector;
     }
 
-    function getLength() public override view returns (uint256, uint256) {
+    function getLengths() public override view returns (uint256, uint256) {
         return (_bTokens.length, _symbols.length);
     }
 
@@ -139,16 +137,14 @@ contract PerpetualPool is IPerpetualPool {
         return _symbols[symbolId].oracleAddress;
     }
 
-    function getProtocolFeeAccrued() public override view returns (uint256) {
-        return uint256(_protocolFeeAccrued);
+    function getProtocolFeeAccrued() public override view returns (int256) {
+        return _protocolFeeAccrued;
     }
 
     function collectProtocolFee() public override {
         IERC20 token = IERC20(_bTokens[0].bTokenAddress);
-        uint256 amount = uint256(_protocolFeeAccrued).rescale(18, _decimals0);
-        if (amount < token.balanceOf(address(this))) {
-            amount = token.balanceOf(address(this));
-        }
+        uint256 amount = _protocolFeeAccrued.itou().rescale(18, _decimals0);
+        if (amount > token.balanceOf(address(this))) amount = token.balanceOf(address(this));
         token.safeTransfer(_protocolFeeCollector, amount);
         _protocolFeeAccrued = 0;
         emit ProtocolFeeCollection(_protocolFeeCollector, amount.rescale(_decimals0, 18));
@@ -198,7 +194,7 @@ contract PerpetualPool is IPerpetualPool {
 
     // during a migration, this function is intended to be called in the target pool
     function executePoolMigration(address sourcePool) public override _router_ {
-        (uint256 blength, uint256 slength) = IPerpetualPool(sourcePool).getLength();
+        (uint256 blength, uint256 slength) = IPerpetualPool(sourcePool).getLengths();
         for (uint256 i = 0; i < blength; i++) {
             BTokenInfo memory b = IPerpetualPool(sourcePool).getBToken(i);
             IERC20(b.bTokenAddress).safeTransferFrom(sourcePool, address(this), IERC20(b.bTokenAddress).balanceOf(sourcePool));
@@ -207,7 +203,7 @@ contract PerpetualPool is IPerpetualPool {
         for (uint256 i = 0; i < slength; i++) {
             _symbols.push(IPerpetualPool(sourcePool).getSymbol(i));
         }
-        _protocolFeeAccrued = int256(IPerpetualPool(sourcePool).getProtocolFeeAccrued());
+        _protocolFeeAccrued = IPerpetualPool(sourcePool).getProtocolFeeAccrued();
     }
 
 
@@ -219,7 +215,7 @@ contract PerpetualPool is IPerpetualPool {
         ILToken lToken = ILToken(_lTokenAddress);
         if(!lToken.exists(owner)) lToken.mint(owner);
 
-        _update(blength, slength);
+        _updatePricesAndDistributePnl(blength, slength);
 
         BTokenInfo storage b = _bTokens[bTokenId];
         bAmount = _deflationCompatibleSafeTransferFrom(b.bTokenAddress, b.decimals, owner, address(this), bAmount);
@@ -227,8 +223,8 @@ contract PerpetualPool is IPerpetualPool {
         int256 cumulativePnl = b.cumulativePnl;
         ILToken.Asset memory asset = lToken.getAsset(owner, bTokenId);
 
-        int256 delta;
-        int256 pnl = (cumulativePnl - asset.lastCumulativePnl) * asset.liquidity / ONE;
+        int256 delta; // owner's liquidity change amount for bTokenId
+        int256 pnl = (cumulativePnl - asset.lastCumulativePnl) * asset.liquidity / ONE; // owner's pnl as LP since last settlement
         if (bTokenId == 0) {
             delta = bAmount.utoi() + pnl.reformat(_decimals0);
             b.pnl -= pnl; // this pnl comes from b.pnl, thus should be deducted from b.pnl
@@ -250,7 +246,7 @@ contract PerpetualPool is IPerpetualPool {
     }
 
     function removeLiquidity(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) public override _router_ _lock_ {
-        _update(blength, slength);
+        _updatePricesAndDistributePnl(blength, slength);
 
         BTokenInfo storage b = _bTokens[bTokenId];
         ILToken lToken = ILToken(_lTokenAddress);
@@ -267,21 +263,21 @@ contract PerpetualPool is IPerpetualPool {
         if (bTokenId == 0) {
             deltaLiquidity = pnl.reformat(_decimals0);
             deltaPnl = -pnl;
-            _protocolFeeAccrued += pnl - pnl.reformat(_decimals0);
+            _protocolFeeAccrued += pnl - pnl.reformat(_decimals0); // deal with accuracy tail
         } else {
             asset.pnl += pnl;
             if (asset.pnl < 0) {
-                (uint256 amountB0, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapQuoteForExactBase(
+                (uint256 amountB0, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapBXForExactB0(
                     (-asset.pnl).ceil(_decimals0).itou(), asset.liquidity.itou()
                 );
                 deltaLiquidity = -amountBX.utoi();
                 deltaPnl = amountB0.utoi();
                 asset.pnl += amountB0.utoi();
             } else if (asset.pnl > 0 && amount >= asset.liquidity) {
-                (, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapExactBaseForQuote(asset.pnl.itou());
+                (, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapExactB0ForBX(asset.pnl.itou());
                 deltaLiquidity = amountBX.utoi();
                 deltaPnl = -asset.pnl;
-                _protocolFeeAccrued += asset.pnl - asset.pnl.reformat(_decimals0);
+                _protocolFeeAccrued += asset.pnl - asset.pnl.reformat(_decimals0); // deal with accuracy tail
                 asset.pnl = 0;
             }
         }
@@ -320,7 +316,7 @@ contract PerpetualPool is IPerpetualPool {
     }
 
     function removeMargin(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) public override _router_ _lock_ {
-        _update(blength, slength);
+        _updatePricesAndDistributePnl(blength, slength);
         _settleTraderFundingFee(owner, slength);
         _coverTraderDebt(owner, blength);
 
@@ -334,7 +330,7 @@ contract PerpetualPool is IPerpetualPool {
 
         if (amount >= margin) {
             bAmount = margin.itou();
-            _protocolFeeAccrued += margin - margin.reformat(_decimals0);
+            _protocolFeeAccrued += margin - margin.reformat(_decimals0); // deal with accuracy tail
             margin = 0;
         } else {
             margin -= amount;
@@ -356,7 +352,7 @@ contract PerpetualPool is IPerpetualPool {
     }
 
     function trade(address owner, uint256 symbolId, int256 tradeVolume, uint256 blength, uint256 slength) public override _router_ _lock_ {
-        _update(blength, slength);
+        _updatePricesAndDistributePnl(blength, slength);
         _settleTraderFundingFee(owner, slength);
 
         SymbolInfo storage s = _symbols[symbolId];
@@ -399,7 +395,7 @@ contract PerpetualPool is IPerpetualPool {
     }
 
     function liquidate(address liquidator, address owner, uint256 blength, uint256 slength) public override _router_ _lock_ {
-        _update(blength, slength);
+        _updatePricesAndDistributePnl(blength, slength);
         _settleTraderFundingFee(owner, slength);
         require(_getTraderMarginRatio(owner, blength, slength) < _minMaintenanceMarginRatio, 'cant liquidate');
 
@@ -418,7 +414,7 @@ contract PerpetualPool is IPerpetualPool {
         netEquity += margins[0];
         for (uint256 i = 1; i < blength; i++) {
             if (margins[i] > 0) {
-                (uint256 amountB0, ) = IBTokenSwapper(_bTokens[i].swapperAddress).swapExactQuoteForBase(margins[i].itou());
+                (uint256 amountB0, ) = IBTokenSwapper(_bTokens[i].swapperAddress).swapExactBXForB0(margins[i].itou());
                 netEquity += amountB0.utoi();
             }
         }
@@ -451,7 +447,7 @@ contract PerpetualPool is IPerpetualPool {
     // update bTokens/symbols prices
     // distribute pnl to bTokens, which is generated since last update, including pnl and funding fees for opening positions
     // by calling this function at the beginning of each block, all LP/Traders status are settled
-    function _update(uint256 blength, uint256 slength) internal {
+    function _updatePricesAndDistributePnl(uint256 blength, uint256 slength) internal {
         uint256 blocknumber = block.number;
         if (blocknumber != _lastUpdateBlock) {
             _updateBTokenPrices(blength);
@@ -474,6 +470,7 @@ contract PerpetualPool is IPerpetualPool {
         for (uint256 i = 0; i < blength; i++) {
             BTokenInfo storage b = _bTokens[i];
             int256 liquidity = b.liquidity;
+            // dynamic equities for bTokens are discounted
             int256 equity = liquidity * b.price / ONE * b.discount / ONE + b.pnl;
             if (liquidity > 0 && equity > 0) {
                 totalDynamicEquity += equity;
@@ -490,6 +487,7 @@ contract PerpetualPool is IPerpetualPool {
                     BTokenInfo storage b = _bTokens[i];
                     int256 distributedPnl = pnl * dynamicEquities[i] / totalDynamicEquity;
                     b.pnl += distributedPnl;
+                    // cumulativePnl is as in per liquidity, thus b.liquidity in denominator
                     b.cumulativePnl += distributedPnl * ONE / b.liquidity;
                 }
             }
@@ -498,6 +496,11 @@ contract PerpetualPool is IPerpetualPool {
 
     // update symbol prices and calculate funding and unrealized pnl for all positions since last call
     // the returned undistributedPnl will be distributed and shared by all LPs
+    //
+    //                 tradersNetVolume * price * multiplier
+    // ratePerBlock = --------------------------------------- * price * multiplier * fundingRateCoefficient
+    //                         totalDynamicEquity
+    //
     function _updateSymbolPrices(int256 totalDynamicEquity, uint256 slength) internal returns (int256) {
         if (totalDynamicEquity <= 0) return 0;
         int256 undistributedPnl;
@@ -507,8 +510,8 @@ contract PerpetualPool is IPerpetualPool {
             int256 tradersNetVolume = s.tradersNetVolume;
             if (tradersNetVolume != 0) {
                 int256 multiplier = s.multiplier;
-                int256 r = tradersNetVolume * price / ONE * price / ONE * multiplier / ONE * multiplier / ONE * s.fundingRateCoefficient / totalDynamicEquity;
-                int256 delta = r * int256(block.number - _lastUpdateBlock);
+                int256 ratePerBlock = tradersNetVolume * price / ONE * price / ONE * multiplier / ONE * multiplier / ONE * s.fundingRateCoefficient / totalDynamicEquity;
+                int256 delta = ratePerBlock * int256(block.number - _lastUpdateBlock);
 
                 undistributedPnl += tradersNetVolume * delta / ONE;
                 undistributedPnl -= tradersNetVolume * (price - s.price) / ONE * multiplier / ONE;
@@ -570,7 +573,7 @@ contract PerpetualPool is IPerpetualPool {
             uint256 amountBX;
             for (uint256 i = blength - 1; i > 0; i--) {
                 if (margins[i] > 0) {
-                    (amountB0, amountBX) = IBTokenSwapper(_bTokens[i].swapperAddress).swapQuoteForExactBase(
+                    (amountB0, amountBX) = IBTokenSwapper(_bTokens[i].swapperAddress).swapBXForExactB0(
                         (-margins[0]).ceil(_decimals0).itou(), margins[i].itou()
                     );
                     margins[0] += amountB0.utoi();

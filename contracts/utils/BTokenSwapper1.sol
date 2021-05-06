@@ -9,47 +9,49 @@ import '../interface/IUniswapV2Router02.sol';
 import '../library/SafeERC20.sol';
 import './BTokenSwapper.sol';
 
+// Swapper using only one pair
+// E.g. swap (AAA for BBB) or (BBB for AAA) through pair AAABBB
 contract BTokenSwapper1 is IBTokenSwapper, BTokenSwapper {
 
     using SafeERC20 for IERC20;
 
     address public immutable router;
     address public immutable pair;
-    bool    public immutable isQuoteToken0;
+    bool    public immutable isBXToken0;
 
-    constructor (address router_, address pair_, address quote_, address base_, bool isQuoteToken0_) BTokenSwapper(quote_, base_) {
+    constructor (address router_, address pair_, address addressBX_, address addressB0_, bool isBXToken0_) BTokenSwapper(addressBX_, addressB0_) {
         router = router_;
         pair = pair_;
-        isQuoteToken0 = isQuoteToken0_;
+        isBXToken0 = isBXToken0_;
 
-        IERC20(quote_).safeApprove(router_, type(uint256).max);
-        IERC20(base_).safeApprove(router_, type(uint256).max);
+        IERC20(addressBX_).safeApprove(router_, type(uint256).max);
+        IERC20(addressB0_).safeApprove(router_, type(uint256).max);
     }
 
     //================================================================================
 
-    // estimate the base token amount needed to swap for `quoteAmountOut` quote tokens
-    function _getBaseAmountIn(uint256 quoteAmountOut) internal override view returns (uint256) {
+    // estimate the tokenB0 amount needed to swap for `amountOutBX` tokenBX
+    function _getAmountInB0(uint256 amountOutBX) internal override view returns (uint256) {
         uint256 reserveIn;
         uint256 reserveOut;
-        if (isQuoteToken0) {
+        if (isBXToken0) {
             (reserveOut, reserveIn, ) = IUniswapV2Pair(pair).getReserves();
         } else {
             (reserveIn, reserveOut, ) = IUniswapV2Pair(pair).getReserves();
         }
-        return IUniswapV2Router02(router).getAmountIn(quoteAmountOut, reserveIn, reserveOut);
+        return IUniswapV2Router02(router).getAmountIn(amountOutBX, reserveIn, reserveOut);
     }
 
-    // estimate the quote token amount needed to swap for `baseAmountOut` base tokens
-    function _getQuoteAmountIn(uint256 baseAmountOut) internal override view returns (uint256) {
+    // estimate the tokenBX amount needed to swap for `amountOutB0` tokenB0
+    function _getAmountInBX(uint256 amountOutB0) internal override view returns (uint256) {
         uint256 reserveIn;
         uint256 reserveOut;
-        if (isQuoteToken0) {
+        if (isBXToken0) {
             (reserveIn, reserveOut, ) = IUniswapV2Pair(pair).getReserves();
         } else {
             (reserveOut, reserveIn, ) = IUniswapV2Pair(pair).getReserves();
         }
-        return IUniswapV2Router02(router).getAmountIn(baseAmountOut, reserveIn, reserveOut);
+        return IUniswapV2Router02(router).getAmountIn(amountOutB0, reserveIn, reserveOut);
     }
 
     // low-level swap function

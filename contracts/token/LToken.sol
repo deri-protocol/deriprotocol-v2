@@ -7,20 +7,21 @@ import './ERC721.sol';
 
 contract LToken is ILToken, ERC721 {
 
+    // LToken name
     string _name;
-
+    // LToken symbol
     string _symbol;
-
+    // associative pool address
     address _pool;
-
     // total LToken ever minted, this number will never decease
     uint256 _totalMinted;
     // total LTokens hold by LPs
     uint256 _totalSupply;
-
+    // number of bTokens
     uint256 _numBTokens;
 
-    mapping (uint256 => mapping (uint256 => Asset)) _tokenIdAssets;    // tokenId => (bTokenId => Asset)
+    // tokenId => (bTokenId => Asset)
+    mapping (uint256 => mapping (uint256 => Asset)) _tokenIdAssets;
 
     modifier _pool_() {
         require(msg.sender == _pool, 'LToken: only pool');

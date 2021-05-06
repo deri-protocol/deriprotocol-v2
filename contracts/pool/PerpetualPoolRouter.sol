@@ -129,7 +129,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
 
     function addLiquidity(uint256 bTokenId, uint256 bAmount) public override {
         IPerpetualPool p = IPerpetualPool(_pool);
-        (uint256 blength, uint256 slength) = p.getLength();
+        (uint256 blength, uint256 slength) = p.getLengths();
 
         require(bTokenId < blength, 'invalid bTokenId');
 
@@ -138,7 +138,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
 
     function removeLiquidity(uint256 bTokenId, uint256 bAmount) public override {
         IPerpetualPool p = IPerpetualPool(_pool);
-        (uint256 blength, uint256 slength) = p.getLength();
+        (uint256 blength, uint256 slength) = p.getLengths();
 
         address owner = msg.sender;
         require(bTokenId < blength, 'invalid bTokenId');
@@ -149,7 +149,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
 
     function addMargin(uint256 bTokenId, uint256 bAmount) public override {
         IPerpetualPool p = IPerpetualPool(_pool);
-        (uint256 blength, ) = p.getLength();
+        (uint256 blength, ) = p.getLengths();
 
         require(bTokenId < blength, 'invalid bTokenId');
 
@@ -158,7 +158,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
 
     function removeMargin(uint256 bTokenId, uint256 bAmount) public override {
         IPerpetualPool p = IPerpetualPool(_pool);
-        (uint256 blength, uint256 slength) = p.getLength();
+        (uint256 blength, uint256 slength) = p.getLengths();
 
         address owner = msg.sender;
         require(bTokenId < blength, 'invalid bTokenId');
@@ -169,7 +169,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
 
     function trade(uint256 symbolId, int256 tradeVolume) public override {
         IPerpetualPool p = IPerpetualPool(_pool);
-        (uint256 blength, uint256 slength) = p.getLength();
+        (uint256 blength, uint256 slength) = p.getLengths();
 
         address owner = msg.sender;
         require(symbolId < slength, 'invalid symbolId');
@@ -180,7 +180,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
 
     function liquidate(address owner) public override {
         IPerpetualPool p = IPerpetualPool(_pool);
-        (uint256 blength, uint256 slength) = p.getLength();
+        (uint256 blength, uint256 slength) = p.getLengths();
 
         address liquidator = msg.sender;
         require(IPToken(_pTokenAddress).exists(owner), 'no trade / no pos');
