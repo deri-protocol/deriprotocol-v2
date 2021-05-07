@@ -537,10 +537,10 @@ contract PerpetualPool is IPerpetualPool {
             if (tradersNetVolume != 0) {
                 int256 cost = tradersNetVolume * s.price / ONE * s.multiplier / ONE;
                 totalDynamicEquity -= cost - s.tradersNetCost;
-                totalCost -= cost;
+                totalCost += cost.abs(); // netting costs cross symbols is forbidden
             }
         }
-        return totalCost == 0 ? type(int256).max : totalDynamicEquity * ONE / totalCost.abs();
+        return totalCost == 0 ? type(int256).max : totalDynamicEquity * ONE / totalCost;
     }
 
     // setting funding fee on trader's side
@@ -602,11 +602,11 @@ contract PerpetualPool is IPerpetualPool {
             if (positions[i].volume != 0) {
                 int256 cost = positions[i].volume * _symbols[i].price / ONE * _symbols[i].multiplier / ONE;
                 totalDynamicEquity += cost - positions[i].cost;
-                totalCost += cost;
+                totalCost += cost.abs(); // netting costs cross symbols is forbidden
             }
         }
 
-        return totalCost == 0 ? type(int256).max : totalDynamicEquity * ONE / totalCost.abs();
+        return totalCost == 0 ? type(int256).max : totalDynamicEquity * ONE / totalCost;
     }
 
     function _deflationCompatibleSafeTransferFrom(address bTokenAddress, uint256 decimals, address from, address to, uint256 bAmount)
