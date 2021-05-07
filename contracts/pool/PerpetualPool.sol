@@ -172,6 +172,10 @@ contract PerpetualPool is IPerpetualPool {
     function setBTokenParameters(uint256 bTokenId, address swapperAddress, address oracleAddress, uint256 discount) public override _router_ {
         BTokenInfo storage b = _bTokens[bTokenId];
         b.swapperAddress = swapperAddress;
+        if (bTokenId != 0) {
+            IERC20(_bTokens[0].bTokenAddress).safeApprove(swapperAddress, type(uint256).max);
+            IERC20(_bTokens[bTokenId].bTokenAddress).safeApprove(swapperAddress, type(uint256).max);
+        }
         b.oracleAddress = oracleAddress;
         b.discount = int256(discount);
     }
