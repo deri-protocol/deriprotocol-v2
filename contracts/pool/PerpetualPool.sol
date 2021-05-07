@@ -146,7 +146,7 @@ contract PerpetualPool is IPerpetualPool {
         uint256 amount = _protocolFeeAccrued.itou().rescale(18, _decimals0);
         if (amount > token.balanceOf(address(this))) amount = token.balanceOf(address(this));
         token.safeTransfer(_protocolFeeCollector, amount);
-        _protocolFeeAccrued = 0;
+        _protocolFeeAccrued -= amount.rescale(_decimals0, 18).utoi();
         emit ProtocolFeeCollection(_protocolFeeCollector, amount.rescale(_decimals0, 18));
     }
 
@@ -364,12 +364,14 @@ contract PerpetualPool is IPerpetualPool {
         params.curCost = tradeVolume * s.price / ONE * s.multiplier / ONE;
         params.fee = params.curCost.abs() * s.feeRatio / ONE;
 
-        if ((p.volume >= 0 && tradeVolume >= 0) || (p.volume <= 0 && tradeVolume <= 0)) {
-
-        } else if (p.volume.abs() <= tradeVolume.abs()) {
-            params.realizedCost = params.curCost * p.volume.abs() / tradeVolume.abs() + p.cost;
-        } else {
-            params.realizedCost = p.cost * tradeVolume.abs() / p.volume.abs() + params.curCost;
+        if (!(p.volume >= 0 && tradeVolume >= 0) && !(p.volume <= 0 && tradeVolume <= 0)) {
+            int256 absVolume = p.volume.abs();
+            int256 absTradeVolume = tradeVolume.abs();
+            if (absVolume <= absTradeVolume) {
+                params.realizedCost = params.curCost * absVolume / absTradeVolume + p.cost;
+            } else {
+                params.realizedCost = p.cost * absTradeVolume / absVolume + params.curCost;
+            }
         }
 
         p.volume += tradeVolume;
