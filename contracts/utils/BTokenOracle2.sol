@@ -89,6 +89,9 @@ contract BTokenOracle2 is IOracle {
             price1 = (qPriceCumulativeLast2 - qPriceCumulativeLast1) / (qTimestampLast2 - qTimestampLast1) * 10**(18 + qDecimals - mDecimals) / Q112;
         } else {
             // Spot
+            // this price will only be used when BToken is newly added to pool
+            // since the liquidity for newly added BToken is always zero,
+            // there will be no manipulation consequences for this price
             price1 = reserveB * 10**(18 + qDecimals - mDecimals) / reserveQ;
         }
 
@@ -112,6 +115,9 @@ contract BTokenOracle2 is IOracle {
             price2 = (bPriceCumulativeLast2 - bPriceCumulativeLast1) / (bTimestampLast2 - bTimestampLast1) * 10**(18 + mDecimals - bDecimals) / Q112;
         } else {
             // Spot
+            // this price will only be used when BToken is newly added to pool
+            // since the liquidity for newly added BToken is always zero,
+            // there will be no manipulation consequences for this price
             price2 = reserveB * 10**(18 + mDecimals - bDecimals) / reserveQ;
         }
 

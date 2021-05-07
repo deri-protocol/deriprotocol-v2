@@ -27,8 +27,8 @@ contract SymbolOracleOffChain is IOracleWithUpdate {
     // update oracle price using off chain signed price
     // the signature must be verified in order for the price to be updated
     function updatePrice(uint256 timestamp_, uint256 price_, uint8 v_, bytes32 r_, bytes32 s_) public override {
-        uint256 curTimestamp = timestamp;
-        if (timestamp_ > curTimestamp) {
+        uint256 lastTimestamp = timestamp;
+        if (timestamp_ > lastTimestamp) {
             if (v_ == 27 || v_ == 28) {
                 bytes32 message = keccak256(abi.encodePacked(symbol, timestamp_, price_));
                 bytes32 hash = keccak256(abi.encodePacked('\x19Ethereum Signed Message:\n32', message));
