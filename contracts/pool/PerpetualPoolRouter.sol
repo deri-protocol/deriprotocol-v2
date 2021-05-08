@@ -159,7 +159,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
         require(bTokenId < blength, 'invalid bTokenId');
 
         p.addMargin(msg.sender, bTokenId, bAmount);
-        _checkBTokenLimit(bTokenId);
+        if (bTokenId != 0) _checkBTokenLimit(bTokenId);
     }
 
     function removeMargin(uint256 bTokenId, uint256 bAmount) public override {
