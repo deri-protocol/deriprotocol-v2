@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: MIT
 
 import '../interface/IERC20.sol';
+import '../interface/IBTokenSwapper.sol';
 import '../interface/IOracleWithUpdate.sol';
 import '../interface/IPToken.sol';
 import '../interface/ILToken.sol';
 import '../interface/IPerpetualPool.sol';
 import '../interface/IPerpetualPoolRouter.sol';
 import '../interface/ILiquidatorQualifier.sol';
+import '../library/SafeMath.sol';
 import '../utils/Migratable.sol';
 
 pragma solidity >=0.8.0 <0.9.0;
 
 contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
+
+    using SafeMath for uint256;
+    using SafeMath for int256;
 
     address _pool;
     address _liquidatorQualifierAddress;
@@ -154,6 +159,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
         require(bTokenId < blength, 'invalid bTokenId');
 
         p.addMargin(msg.sender, bTokenId, bAmount);
+        _checkBTokenLimit(bTokenId);
     }
 
     function removeMargin(uint256 bTokenId, uint256 bAmount) public override {
@@ -235,6 +241,15 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
             address oracle = IPerpetualPool(_pool).getSymbolOracle(infos[i].symbolId);
             IOracleWithUpdate(oracle).updatePrice(infos[i].timestamp, infos[i].price, infos[i].v, infos[i].r, infos[i].s);
         }
+    }
+
+    function _checkBTokenLimit(uint256 bTokenId) internal view {
+        IPerpetualPool.BTokenInfo memory b = IPerpetualPool(_pool).getBToken(bTokenId);
+        IERC20 bToken = IERC20(b.bTokenAddress);
+        uint256 balance = bToken.balanceOf(_pool).rescale(bToken.decimals(), 18);
+        uint256 balanceWithoutLiquidity = balance - b.liquidity.itou();
+        uint256 limit = IBTokenSwapper(b.swapperAddress).getLimitBX();
+        require(balanceWithoutLiquidity < limit, 'bToken exceeds swapper liquidity limit');
     }
 
 }

@@ -12,6 +12,8 @@ interface IBTokenSwapper {
 
     function swapBXForExactB0(uint256 amountB0, uint256 amountBX) external returns (uint256 resultB0, uint256 resultBX);
 
+    function getLimitBX() external view returns (uint256);
+
     function sync() external;
 
 }

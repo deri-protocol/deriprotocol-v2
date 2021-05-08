@@ -7,12 +7,14 @@ import '../interface/IERC20.sol';
 import '../interface/IUniswapV2Pair.sol';
 import '../interface/IUniswapV2Router02.sol';
 import '../library/SafeERC20.sol';
+import '../library/SafeMath.sol';
 import './BTokenSwapper.sol';
 
 // Swapper using two pairs
 // E.g. swap (AAA for CCC) or (CCC for AAA) through pairs AAABBB and BBBCCC
 contract BTokenSwapper2 is IBTokenSwapper, BTokenSwapper {
 
+    using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
     address public immutable router;
@@ -21,6 +23,7 @@ contract BTokenSwapper2 is IBTokenSwapper, BTokenSwapper {
     address public immutable addressMid;
     bool    public immutable isBXToken0;
     bool    public immutable isB0Token0;
+    uint256 public immutable liquidityLimitRatio;
 
     constructor (
         address router_,
@@ -30,7 +33,8 @@ contract BTokenSwapper2 is IBTokenSwapper, BTokenSwapper {
         address addressMid_,
         address addressB0_,
         bool    isBXToken0_,
-        bool    isB0Token0_
+        bool    isB0Token0_,
+        uint256 liquidityLimitRatio_
     ) BTokenSwapper(addressBX_, addressB0_) {
         router = router_;
         pairBX = pairBX_;
@@ -38,9 +42,20 @@ contract BTokenSwapper2 is IBTokenSwapper, BTokenSwapper {
         addressMid = addressMid_;
         isBXToken0 = isBXToken0_;
         isB0Token0 = isB0Token0_;
+        liquidityLimitRatio = liquidityLimitRatio_;
 
         IERC20(addressBX_).safeApprove(router_, type(uint256).max);
         IERC20(addressB0_).safeApprove(router_, type(uint256).max);
+    }
+
+    function getLimitBX() public override view returns (uint256) {
+        uint256 reserve;
+        if (isBXToken0) {
+            (reserve, , ) = IUniswapV2Pair(pairBX).getReserves();
+        } else {
+            (, reserve, ) = IUniswapV2Pair(pairBX).getReserves();
+        }
+        return reserve.rescale(decimalsBX, 18) * liquidityLimitRatio / 10**18;
     }
 
     //================================================================================
