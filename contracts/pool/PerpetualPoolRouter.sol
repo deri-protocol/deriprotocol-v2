@@ -159,7 +159,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
         require(bTokenId < blength, 'invalid bTokenId');
 
         p.addMargin(msg.sender, bTokenId, bAmount);
-        if (bTokenId != 0) _checkBTokenLimit(bTokenId);
+        if (bTokenId != 0) _checkBTokenMarginLimit(bTokenId);
     }
 
     function removeMargin(uint256 bTokenId, uint256 bAmount) public override {
@@ -243,13 +243,13 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
         }
     }
 
-    function _checkBTokenLimit(uint256 bTokenId) internal view {
+    function _checkBTokenMarginLimit(uint256 bTokenId) internal view {
         IPerpetualPool.BTokenInfo memory b = IPerpetualPool(_pool).getBToken(bTokenId);
         IERC20 bToken = IERC20(b.bTokenAddress);
         uint256 balance = bToken.balanceOf(_pool).rescale(bToken.decimals(), 18);
-        uint256 balanceWithoutLiquidity = balance - b.liquidity.itou();
+        uint256 marginBX = balance - b.liquidity.itou();
         uint256 limit = IBTokenSwapper(b.swapperAddress).getLimitBX();
-        require(balanceWithoutLiquidity < limit, 'bToken exceeds swapper liquidity limit');
+        require(marginBX < limit, 'margin in bTokenX exceeds swapper liquidity limit');
     }
 
 }
