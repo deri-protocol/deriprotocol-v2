@@ -198,16 +198,16 @@ contract PerpetualPool is IPerpetualPool {
 
     // during a migration, this function is intended to be called in the target pool
     function executePoolMigration(address sourcePool) public override _router_ {
-        (uint256 blength, uint256 slength) = IPerpetualPool(sourcePool).getLengths();
-        for (uint256 i = 0; i < blength; i++) {
-            BTokenInfo memory b = IPerpetualPool(sourcePool).getBToken(i);
-            IERC20(b.bTokenAddress).safeTransferFrom(sourcePool, address(this), IERC20(b.bTokenAddress).balanceOf(sourcePool));
-            _bTokens.push(b);
-        }
-        for (uint256 i = 0; i < slength; i++) {
-            _symbols.push(IPerpetualPool(sourcePool).getSymbol(i));
-        }
-        _protocolFeeAccrued = IPerpetualPool(sourcePool).getProtocolFeeAccrued();
+        // (uint256 blength, uint256 slength) = IPerpetualPool(sourcePool).getLengths();
+        // for (uint256 i = 0; i < blength; i++) {
+        //     BTokenInfo memory b = IPerpetualPool(sourcePool).getBToken(i);
+        //     IERC20(b.bTokenAddress).safeTransferFrom(sourcePool, address(this), IERC20(b.bTokenAddress).balanceOf(sourcePool));
+        //     _bTokens.push(b);
+        // }
+        // for (uint256 i = 0; i < slength; i++) {
+        //     _symbols.push(IPerpetualPool(sourcePool).getSymbol(i));
+        // }
+        // _protocolFeeAccrued = IPerpetualPool(sourcePool).getProtocolFeeAccrued();
     }
 
 
@@ -219,6 +219,7 @@ contract PerpetualPool is IPerpetualPool {
         ILToken lToken = ILToken(_lTokenAddress);
         if(!lToken.exists(owner)) lToken.mint(owner);
 
+        _updateBTokenPrice(bTokenId);
         _updatePricesAndDistributePnl(blength, slength);
 
         BTokenInfo storage b = _bTokens[bTokenId];
@@ -250,6 +251,7 @@ contract PerpetualPool is IPerpetualPool {
     }
 
     function removeLiquidity(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) public override _router_ _lock_ {
+        _updateBTokenPrice(bTokenId);
         _updatePricesAndDistributePnl(blength, slength);
 
         BTokenInfo storage b = _bTokens[bTokenId];
@@ -401,6 +403,7 @@ contract PerpetualPool is IPerpetualPool {
     }
 
     function liquidate(address liquidator, address owner, uint256 blength, uint256 slength) public override _router_ _lock_ {
+        _updateAllBTokenPrices(blength);
         _updatePricesAndDistributePnl(blength, slength);
         _settleTraderFundingFee(owner, slength);
         require(_getTraderMarginRatio(owner, blength, slength) < _minMaintenanceMarginRatio, 'cant liquidate');
@@ -456,7 +459,6 @@ contract PerpetualPool is IPerpetualPool {
     function _updatePricesAndDistributePnl(uint256 blength, uint256 slength) internal {
         uint256 blocknumber = block.number;
         if (blocknumber != _lastUpdateBlock) {
-            _updateBTokenPrices(blength);
             (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
             int256 undistributedPnl = _updateSymbolPrices(totalDynamicEquity, slength);
             _distributePnlToBTokens(undistributedPnl, totalDynamicEquity, dynamicEquities, blength);
@@ -464,10 +466,14 @@ contract PerpetualPool is IPerpetualPool {
         }
     }
 
-    function _updateBTokenPrices(uint256 blength) internal {
+    function _updateAllBTokenPrices(uint256 blength) internal {
         for (uint256 i = 1; i < blength; i++) {
             _bTokens[i].price = IOracle(_bTokens[i].oracleAddress).getPrice().utoi();
         }
+    }
+
+    function _updateBTokenPrice(uint256 bTokenId) internal {
+        if (bTokenId != 0) _bTokens[bTokenId].price = IOracle(_bTokens[bTokenId].oracleAddress).getPrice().utoi();
     }
 
     function _getBTokenDynamicEquities(uint256 blength) internal view returns (int256, int256[] memory) {
