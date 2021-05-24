@@ -95,17 +95,17 @@ describe('DeriV2', function () {
         await router.setPool(pool.address)
 
         swapperWETH = await (await ethers.getContractFactory('BTokenSwapper1')).deploy(
-            unirouter.address, pair1.address, weth.address, usdt.address, false
+            unirouter.address, pair1.address, weth.address, usdt.address, weth.address < usdt.address, one(2, 1), one(5, 1)
         )
         swapperSUSI = await (await ethers.getContractFactory('BTokenSwapper2')).deploy(
-            unirouter.address, pair2.address, pair1.address, susi.address, weth.address, usdt.address, false, true
+            unirouter.address, pair2.address, pair1.address, susi.address, weth.address, usdt.address, susi.address < weth.address, usdt.address < weth.address, one(2, 1), one(5, 1)
         )
 
         oracleWETH = await (await ethers.getContractFactory('BTokenOracle1')).deploy(
-            pair1.address, weth.address, usdt.address, false
+            pair1.address, weth.address, usdt.address, weth.address < usdt.address
         )
         oracleSUSI = await (await ethers.getContractFactory('BTokenOracle2')).deploy(
-            pair2.address, pair1.address, susi.address, weth.address, usdt.address, false, true
+            pair2.address, pair1.address, susi.address, weth.address, usdt.address, susi.address < weth.address, usdt.address < weth.address
         )
 
         oracleBTCUSD = await (await ethers.getContractFactory('TSymbolHandler')).deploy()
@@ -134,8 +134,8 @@ describe('DeriV2', function () {
     it('deploy correctly', async function () {
         expect((await pool.getParameters()).minMaintenanceMarginRatio).to.equal(one(5, 2))
         expect((await pool.getAddresses()).lTokenAddress).to.equal(lToken.address)
-        expect((await pool.getLength())[0]).to.equal(3)
-        expect((await pool.getLength())[1]).to.equal(2)
+        expect((await pool.getLengths())[0]).to.equal(3)
+        expect((await pool.getLengths())[1]).to.equal(2)
 
         expect((await pool.getBToken(0)).discount).to.equal(one())
         expect((await pool.getBToken(1)).bTokenAddress).to.equal(weth.address)
@@ -219,49 +219,49 @@ describe('DeriV2', function () {
         expect((await lToken.getAsset(account2.address, 1)).pnl).to.equal(neg(one('15362313917495867375', 18)))
     })
 
-    it('migration work correctly', async function () {
-        await router.connect(account1).addLiquidity(0, one(10000))
-        await router.connect(account3).addMargin(2, one(200))
-        await router.connect(account3).trade(1, neg(one(200)))
+    // it('migration work correctly', async function () {
+    //     await router.connect(account1).addLiquidity(0, one(10000))
+    //     await router.connect(account3).addMargin(2, one(200))
+    //     await router.connect(account3).trade(1, neg(one(200)))
 
-        router2 = await (await ethers.getContractFactory('PerpetualPoolRouter')).deploy(lToken.address, pToken.address, ZERO_ADDRESS)
-        pool2 = await (await ethers.getContractFactory('PerpetualPool')).deploy(
-            [
-                usdt.decimals(),
-                one(5, 1),  // minBToken0Ratio
-                one(),      // minPoolMarginRatio
-                one(1, 1),  // minInitialMarginRatio
-                one(5, 2),  // minMaintenanceMarginRatio
-                one(10),    // minLiquidationReward
-                one(200),   // maxLiquidationReward
-                one(5, 1),  // liquidationCutRatio
-                one(2, 1)   // protocolFeeCollectRatio
-            ],
-            [lToken.address, pToken.address, router2.address, account1.address]
-        )
-        await router2.connect(account1).setPool(pool2.address)
+    //     router2 = await (await ethers.getContractFactory('PerpetualPoolRouter')).deploy(lToken.address, pToken.address, ZERO_ADDRESS)
+    //     pool2 = await (await ethers.getContractFactory('PerpetualPool')).deploy(
+    //         [
+    //             usdt.decimals(),
+    //             one(5, 1),  // minBToken0Ratio
+    //             one(),      // minPoolMarginRatio
+    //             one(1, 1),  // minInitialMarginRatio
+    //             one(5, 2),  // minMaintenanceMarginRatio
+    //             one(10),    // minLiquidationReward
+    //             one(200),   // maxLiquidationReward
+    //             one(5, 1),  // liquidationCutRatio
+    //             one(2, 1)   // protocolFeeCollectRatio
+    //         ],
+    //         [lToken.address, pToken.address, router2.address, account1.address]
+    //     )
+    //     await router2.connect(account1).setPool(pool2.address)
 
-        await router.connect(account1).prepareMigration(router2.address, 3)
-        await expect(router.connect(account1).approveMigration()).to.be.revertedWith('migration time not met')
+    //     await router.connect(account1).prepareMigration(router2.address, 3)
+    //     await expect(router.connect(account1).approveMigration()).to.be.revertedWith('migration time not met')
 
-        await ethers.provider.send('evm_increaseTime', [86400*3])
-        await router.connect(account1).approveMigration()
-        await expect(router.connect(account1).removeLiquidity(0, one())).to.be.revertedWith('LToken: only pool')
-        await expect(router.connect(account3).trade(1, one(200))).to.be.revertedWith('PToken: only pool')
+    //     await ethers.provider.send('evm_increaseTime', [86400*3])
+    //     await router.connect(account1).approveMigration()
+    //     await expect(router.connect(account1).removeLiquidity(0, one())).to.be.revertedWith('LToken: only pool')
+    //     await expect(router.connect(account3).trade(1, one(200))).to.be.revertedWith('PToken: only pool')
 
-        await router2.connect(account1).executeMigration(router.address)
-        expect(await usdt.balanceOf(pool.address)).to.equal(0)
-        expect(await susi.balanceOf(pool.address)).to.equal(0)
-        expect(await usdt.balanceOf(pool2.address)).to.equal(one(10000, 0, 6))
-        expect(await susi.balanceOf(pool2.address)).to.equal(one(200))
+    //     await router2.connect(account1).executeMigration(router.address)
+    //     expect(await usdt.balanceOf(pool.address)).to.equal(0)
+    //     expect(await susi.balanceOf(pool.address)).to.equal(0)
+    //     expect(await usdt.balanceOf(pool2.address)).to.equal(one(10000, 0, 6))
+    //     expect(await susi.balanceOf(pool2.address)).to.equal(one(200))
 
-        expect((await pool2.getLength())[0]).to.equal(3)
-        expect((await pool2.getLength())[1]).to.equal(2)
-        expect((await pool2.getParameters()).minBToken0Ratio).to.equal(one(5, 1))
-        await router2.connect(account3).trade(1, one(200))
-        expect((await pToken.getPosition(account3.address, 1)).volume).to.equal(0)
-        await router2.connect(account1).removeLiquidity(0, one(1000))
-        expect((await lToken.getAsset(account1.address, 0)).liquidity).to.equal(one('9000228479000000000000', 18))
-    })
+    //     expect((await pool2.getLength())[0]).to.equal(3)
+    //     expect((await pool2.getLength())[1]).to.equal(2)
+    //     expect((await pool2.getParameters()).minBToken0Ratio).to.equal(one(5, 1))
+    //     await router2.connect(account3).trade(1, one(200))
+    //     expect((await pToken.getPosition(account3.address, 1)).volume).to.equal(0)
+    //     await router2.connect(account1).removeLiquidity(0, one(1000))
+    //     expect((await lToken.getAsset(account1.address, 0)).liquidity).to.equal(one('9000228479000000000000', 18))
+    // })
 
 })

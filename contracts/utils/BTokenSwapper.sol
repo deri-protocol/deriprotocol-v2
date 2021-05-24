@@ -14,22 +14,26 @@ abstract contract BTokenSwapper is IBTokenSwapper {
     using SafeMath for uint256;
     using SafeERC20 for IERC20;
 
+    uint256 constant UONE = 10**18;
+
     // address of the tokenBX, e.x. WETH
     address public immutable addressBX;
     // address of the tokenB0, this is the base0 token (settlement token) of PerpetualPool, e.x. USDT
     address public immutable addressB0;
     uint256 public immutable decimalsBX;
     uint256 public immutable decimalsB0;
+    uint256 public immutable maxSlippageRatio;
 
-    constructor (address addressBX_, address addressB0_) {
+    constructor (address addressBX_, address addressB0_, uint256 maxSlippageRatio_) {
         addressBX = addressBX_;
         addressB0 = addressB0_;
         decimalsBX = IERC20(addressBX_).decimals();
         decimalsB0 = IERC20(addressB0_).decimals();
+        maxSlippageRatio = maxSlippageRatio_;
     }
 
     // swap exact `amountB0` amount of tokenB0 for tokenBX
-    function swapExactB0ForBX(uint256 amountB0) public override returns (uint256 resultB0, uint256 resultBX) {
+    function swapExactB0ForBX(uint256 amountB0, uint256 referencePrice) public override returns (uint256 resultB0, uint256 resultBX) {
         address caller = msg.sender;
 
         IERC20 tokenB0 = IERC20(addressB0);
@@ -43,10 +47,15 @@ abstract contract BTokenSwapper is IBTokenSwapper {
 
         resultB0 = amountB0.rescale(decimalsB0, 18);
         resultBX = (bx2 - bx1).rescale(decimalsBX, 18);
+
+        require(
+            resultBX >= resultB0  * (UONE - maxSlippageRatio) / referencePrice,
+            'BTokenSwapper.swapExactB0ForBX: slippage exceeds allowance'
+        );
     }
 
     // swap exact `amountBX` amount of tokenBX token for tokenB0
-    function swapExactBXForB0(uint256 amountBX) public override returns (uint256 resultB0, uint256 resultBX) {
+    function swapExactBXForB0(uint256 amountBX, uint256 referencePrice) public override returns (uint256 resultB0, uint256 resultBX) {
         address caller = msg.sender;
 
         IERC20 tokenB0 = IERC20(addressB0);
@@ -60,12 +69,17 @@ abstract contract BTokenSwapper is IBTokenSwapper {
 
         resultB0 = (b02 - b01).rescale(decimalsB0, 18);
         resultBX = amountBX.rescale(decimalsBX, 18);
+
+        require(
+            resultB0 >= resultBX * referencePrice / UONE * (UONE - maxSlippageRatio) / UONE,
+            'BTokenSwapper.swapExactBXForB0: slippage exceeds allowance'
+        );
     }
 
     // swap max amount of tokenB0 `amountB0` for exact amount of tokenBX `amountBX`
     // in case `amountB0` is sufficient, the remains will be sent back
     // in case `amountB0` is insufficient, it will be used up to swap for tokenBX
-    function swapB0ForExactBX(uint256 amountB0, uint256 amountBX) public override returns (uint256 resultB0, uint256 resultBX) {
+    function swapB0ForExactBX(uint256 amountB0, uint256 amountBX, uint256 referencePrice) public override returns (uint256 resultB0, uint256 resultBX) {
         address caller = msg.sender;
 
         IERC20 tokenB0 = IERC20(addressB0);
@@ -91,12 +105,17 @@ abstract contract BTokenSwapper is IBTokenSwapper {
 
         resultB0 = (b01 - b02).rescale(decimalsB0, 18);
         resultBX = (bx2 - bx1).rescale(decimalsBX, 18);
+
+        require(
+            resultBX >= resultB0  * (UONE - maxSlippageRatio) / referencePrice,
+            'BTokenSwapper.swapB0ForExactBX: slippage exceeds allowance'
+        );
     }
 
     // swap max amount of tokenBX `amountBX` for exact amount of tokenB0 `amountB0`
     // in case `amountBX` is sufficient, the remains will be sent back
     // in case `amountBX` is insufficient, it will be used up to swap for tokenB0
-    function swapBXForExactB0(uint256 amountB0, uint256 amountBX) public override returns (uint256 resultB0, uint256 resultBX) {
+    function swapBXForExactB0(uint256 amountB0, uint256 amountBX, uint256 referencePrice) public override returns (uint256 resultB0, uint256 resultBX) {
         address caller = msg.sender;
 
         IERC20 tokenB0 = IERC20(addressB0);
@@ -122,6 +141,11 @@ abstract contract BTokenSwapper is IBTokenSwapper {
 
         resultB0 = (b02 - b01).rescale(decimalsB0, 18);
         resultBX = (bx1 - bx2).rescale(decimalsBX, 18);
+
+        require(
+            resultB0 >= resultBX * referencePrice / UONE * (UONE - maxSlippageRatio) / UONE,
+            'BTokenSwapper.swapBXForExactB0: slippage exceeds allowance'
+        );
     }
 
     // in case someone send tokenB0/tokenBX to this contract,
