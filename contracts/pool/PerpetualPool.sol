@@ -155,6 +155,7 @@ contract PerpetualPool is IPerpetualPool {
             // approve for non bToken0 swappers
             IERC20(_bTokens[0].bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
             IERC20(info.bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
+            info.price = IOracle(info.oracleAddress).getPrice().utoi();
         } else {
             require(info.decimals == _decimals0, 'wrong dec');
             info.price = ONE;
@@ -173,6 +174,8 @@ contract PerpetualPool is IPerpetualPool {
         BTokenInfo storage b = _bTokens[bTokenId];
         b.swapperAddress = swapperAddress;
         if (bTokenId != 0) {
+            IERC20(_bTokens[0].bTokenAddress).safeApprove(swapperAddress, 0);
+            IERC20(_bTokens[bTokenId].bTokenAddress).safeApprove(swapperAddress, 0);
             IERC20(_bTokens[0].bTokenAddress).safeApprove(swapperAddress, type(uint256).max);
             IERC20(_bTokens[bTokenId].bTokenAddress).safeApprove(swapperAddress, type(uint256).max);
         }
@@ -274,13 +277,13 @@ contract PerpetualPool is IPerpetualPool {
             asset.pnl += pnl;
             if (asset.pnl < 0) {
                 (uint256 amountB0, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapBXForExactB0(
-                    (-asset.pnl).ceil(_decimals0).itou(), asset.liquidity.itou()
+                    (-asset.pnl).ceil(_decimals0).itou(), asset.liquidity.itou(), b.price.itou()
                 );
                 deltaLiquidity = -amountBX.utoi();
                 deltaPnl = amountB0.utoi();
                 asset.pnl += amountB0.utoi();
             } else if (asset.pnl > 0 && amount >= asset.liquidity) {
-                (, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapExactB0ForBX(asset.pnl.itou());
+                (, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapExactB0ForBX(asset.pnl.itou(), b.price.itou());
                 deltaLiquidity = amountBX.utoi();
                 deltaPnl = -asset.pnl;
                 _protocolFeeAccrued += asset.pnl - asset.pnl.reformat(_decimals0); // deal with accuracy tail
@@ -336,7 +339,7 @@ contract PerpetualPool is IPerpetualPool {
 
         if (amount >= margin) {
             bAmount = margin.itou();
-            _protocolFeeAccrued += margin - margin.reformat(_decimals0); // deal with accuracy tail
+            if (bTokenId == 0) _protocolFeeAccrued += margin - margin.reformat(_decimals0); // deal with accuracy tail
             margin = 0;
         } else {
             margin -= amount;
@@ -423,7 +426,7 @@ contract PerpetualPool is IPerpetualPool {
         netEquity += margins[0];
         for (uint256 i = 1; i < blength; i++) {
             if (margins[i] > 0) {
-                (uint256 amountB0, ) = IBTokenSwapper(_bTokens[i].swapperAddress).swapExactBXForB0(margins[i].itou());
+                (uint256 amountB0, ) = IBTokenSwapper(_bTokens[i].swapperAddress).swapExactBXForB0(margins[i].itou(), _bTokens[i].price.itou());
                 netEquity += amountB0.utoi();
             }
         }
@@ -458,7 +461,7 @@ contract PerpetualPool is IPerpetualPool {
     // by calling this function at the beginning of each block, all LP/Traders status are settled
     function _updatePricesAndDistributePnl(uint256 blength, uint256 slength) internal {
         uint256 blocknumber = block.number;
-        if (blocknumber != _lastUpdateBlock) {
+        if (blocknumber > _lastUpdateBlock) {
             (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
             int256 undistributedPnl = _updateSymbolPrices(totalDynamicEquity, slength);
             _distributePnlToBTokens(undistributedPnl, totalDynamicEquity, dynamicEquities, blength);
@@ -586,7 +589,7 @@ contract PerpetualPool is IPerpetualPool {
             for (uint256 i = blength - 1; i > 0; i--) {
                 if (margins[i] > 0) {
                     (amountB0, amountBX) = IBTokenSwapper(_bTokens[i].swapperAddress).swapBXForExactB0(
-                        (-margins[0]).ceil(_decimals0).itou(), margins[i].itou()
+                        (-margins[0]).ceil(_decimals0).itou(), margins[i].itou(), _bTokens[i].price.itou()
                     );
                     margins[0] += amountB0.utoi();
                     margins[i] -= amountBX.utoi();

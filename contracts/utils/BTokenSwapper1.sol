@@ -28,8 +28,9 @@ contract BTokenSwapper1 is IBTokenSwapper, BTokenSwapper {
         address addressBX_,
         address addressB0_,
         bool isBXToken0_,
+        uint256 maxSlippageRatio_,
         uint256 liquidityLimitRatio_
-    ) BTokenSwapper(addressBX_, addressB0_)
+    ) BTokenSwapper(addressBX_, addressB0_, maxSlippageRatio_)
     {
         router = router_;
         pair = pair_;
