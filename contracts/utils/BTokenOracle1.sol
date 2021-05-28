@@ -36,7 +36,7 @@ contract BTokenOracle1 is IOracle {
         (, , timestampLast2) = p.getReserves();
     }
 
-    function getPrice() public override returns (uint256) {
+    function getPrice() external override returns (uint256) {
         IUniswapV2Pair p = IUniswapV2Pair(pair);
         uint256 reserveQ;
         uint256 reserveB;

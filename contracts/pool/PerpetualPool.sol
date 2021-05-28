@@ -83,7 +83,7 @@ contract PerpetualPool is IPerpetualPool {
         _protocolFeeCollector = addresses[3];
     }
 
-    function getParameters() public override view returns (
+    function getParameters() external override view returns (
         uint256 decimals0,
         int256  minBToken0Ratio,
         int256  minPoolMarginRatio,
@@ -105,7 +105,7 @@ contract PerpetualPool is IPerpetualPool {
         protocolFeeCollectRatio = _protocolFeeCollectRatio;
     }
 
-    function getAddresses() public override view returns (
+    function getAddresses() external override view returns (
         address lTokenAddress,
         address pTokenAddress,
         address routerAddress,
@@ -117,40 +117,40 @@ contract PerpetualPool is IPerpetualPool {
         protocolFeeCollector = _protocolFeeCollector;
     }
 
-    function getLengths() public override view returns (uint256, uint256) {
+    function getLengths() external override view returns (uint256, uint256) {
         return (_bTokens.length, _symbols.length);
     }
 
-    function getBToken(uint256 bTokenId) public override view returns (BTokenInfo memory) {
+    function getBToken(uint256 bTokenId) external override view returns (BTokenInfo memory) {
         return _bTokens[bTokenId];
     }
 
-    function getSymbol(uint256 symbolId) public override view returns (SymbolInfo memory) {
+    function getSymbol(uint256 symbolId) external override view returns (SymbolInfo memory) {
         return _symbols[symbolId];
     }
 
-    function getBTokenOracle(uint256 bTokenId) public override view returns (address) {
+    function getBTokenOracle(uint256 bTokenId) external override view returns (address) {
         return _bTokens[bTokenId].oracleAddress;
     }
 
-    function getSymbolOracle(uint256 symbolId) public override view returns (address) {
+    function getSymbolOracle(uint256 symbolId) external override view returns (address) {
         return _symbols[symbolId].oracleAddress;
     }
 
-    function getProtocolFeeAccrued() public override view returns (int256) {
+    function getProtocolFeeAccrued() external override view returns (int256) {
         return _protocolFeeAccrued;
     }
 
-    function collectProtocolFee() public override {
+    function collectProtocolFee() external override {
         IERC20 token = IERC20(_bTokens[0].bTokenAddress);
         uint256 amount = _protocolFeeAccrued.itou().rescale(18, _decimals0);
         if (amount > token.balanceOf(address(this))) amount = token.balanceOf(address(this));
-        token.safeTransfer(_protocolFeeCollector, amount);
         _protocolFeeAccrued -= amount.rescale(_decimals0, 18).utoi();
+        token.safeTransfer(_protocolFeeCollector, amount);
         emit ProtocolFeeCollection(_protocolFeeCollector, amount.rescale(_decimals0, 18));
     }
 
-    function addBToken(BTokenInfo memory info) public override _router_ {
+    function addBToken(BTokenInfo memory info) external override _router_ {
         if (_bTokens.length > 0) {
             // approve for non bToken0 swappers
             IERC20(_bTokens[0].bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
@@ -165,12 +165,12 @@ contract PerpetualPool is IPerpetualPool {
         IPToken(_pTokenAddress).setNumBTokens(_bTokens.length);
     }
 
-    function addSymbol(SymbolInfo memory info) public override _router_ {
+    function addSymbol(SymbolInfo memory info) external override _router_ {
         _symbols.push(info);
         IPToken(_pTokenAddress).setNumSymbols(_symbols.length);
     }
 
-    function setBTokenParameters(uint256 bTokenId, address swapperAddress, address oracleAddress, uint256 discount) public override _router_ {
+    function setBTokenParameters(uint256 bTokenId, address swapperAddress, address oracleAddress, uint256 discount) external override _router_ {
         BTokenInfo storage b = _bTokens[bTokenId];
         b.swapperAddress = swapperAddress;
         if (bTokenId != 0) {
@@ -183,7 +183,7 @@ contract PerpetualPool is IPerpetualPool {
         b.discount = int256(discount);
     }
 
-    function setSymbolParameters(uint256 symbolId, address oracleAddress, uint256 feeRatio, uint256 fundingRateCoefficient) public override _router_ {
+    function setSymbolParameters(uint256 symbolId, address oracleAddress, uint256 feeRatio, uint256 fundingRateCoefficient) external override _router_ {
         SymbolInfo storage s = _symbols[symbolId];
         s.oracleAddress = oracleAddress;
         s.feeRatio = int256(feeRatio);
@@ -191,7 +191,7 @@ contract PerpetualPool is IPerpetualPool {
     }
 
     // during a migration, this function is intended to be called in the source pool
-    function approvePoolMigration(address targetPool) public override _router_ {
+    function approvePoolMigration(address targetPool) external override _router_ {
         for (uint256 i = 0; i < _bTokens.length; i++) {
             IERC20(_bTokens[i].bTokenAddress).safeApprove(targetPool, type(uint256).max);
         }
@@ -200,7 +200,7 @@ contract PerpetualPool is IPerpetualPool {
     }
 
     // during a migration, this function is intended to be called in the target pool
-    function executePoolMigration(address sourcePool) public override _router_ {
+    function executePoolMigration(address sourcePool) external override _router_ {
         // (uint256 blength, uint256 slength) = IPerpetualPool(sourcePool).getLengths();
         // for (uint256 i = 0; i < blength; i++) {
         //     BTokenInfo memory b = IPerpetualPool(sourcePool).getBToken(i);
@@ -218,7 +218,7 @@ contract PerpetualPool is IPerpetualPool {
     // Core Logics
     //================================================================================
 
-    function addLiquidity(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) public override _router_ _lock_ {
+    function addLiquidity(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) external override _router_ _lock_ {
         ILToken lToken = ILToken(_lTokenAddress);
         if(!lToken.exists(owner)) lToken.mint(owner);
 
@@ -253,7 +253,7 @@ contract PerpetualPool is IPerpetualPool {
         emit AddLiquidity(owner, bTokenId, bAmount);
     }
 
-    function removeLiquidity(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) public override _router_ _lock_ {
+    function removeLiquidity(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) external override _router_ _lock_ {
         _updateBTokenPrice(bTokenId);
         _updatePricesAndDistributePnl(blength, slength);
 
@@ -311,7 +311,7 @@ contract PerpetualPool is IPerpetualPool {
         emit RemoveLiquidity(owner, bTokenId, bAmount);
     }
 
-    function addMargin(address owner, uint256 bTokenId, uint256 bAmount) public override _router_ _lock_ {
+    function addMargin(address owner, uint256 bTokenId, uint256 bAmount) external override _router_ _lock_ {
         IPToken pToken = IPToken(_pTokenAddress);
         if (!pToken.exists(owner)) pToken.mint(owner);
 
@@ -324,7 +324,7 @@ contract PerpetualPool is IPerpetualPool {
         emit AddMargin(owner, bTokenId, bAmount);
     }
 
-    function removeMargin(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) public override _router_ _lock_ {
+    function removeMargin(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) external override _router_ _lock_ {
         _updatePricesAndDistributePnl(blength, slength);
         _settleTraderFundingFee(owner, slength);
         _coverTraderDebt(owner, blength);
@@ -360,7 +360,7 @@ contract PerpetualPool is IPerpetualPool {
         int256 protocolFee;
     }
 
-    function trade(address owner, uint256 symbolId, int256 tradeVolume, uint256 blength, uint256 slength) public override _router_ _lock_ {
+    function trade(address owner, uint256 symbolId, int256 tradeVolume, uint256 blength, uint256 slength) external override _router_ _lock_ {
         _updatePricesAndDistributePnl(blength, slength);
         _settleTraderFundingFee(owner, slength);
 
@@ -405,7 +405,7 @@ contract PerpetualPool is IPerpetualPool {
         emit Trade(owner, symbolId, tradeVolume, s.price.itou());
     }
 
-    function liquidate(address liquidator, address owner, uint256 blength, uint256 slength) public override _router_ _lock_ {
+    function liquidate(address liquidator, address owner, uint256 blength, uint256 slength) external override _router_ _lock_ {
         _updateAllBTokenPrices(blength);
         _updatePricesAndDistributePnl(blength, slength);
         _settleTraderFundingFee(owner, slength);

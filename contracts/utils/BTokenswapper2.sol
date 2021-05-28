@@ -49,7 +49,7 @@ contract BTokenSwapper2 is IBTokenSwapper, BTokenSwapper {
         IERC20(addressB0_).safeApprove(router_, type(uint256).max);
     }
 
-    function getLimitBX() public override view returns (uint256) {
+    function getLimitBX() external override view returns (uint256) {
         uint256 reserve;
         if (isBXToken0) {
             (reserve, , ) = IUniswapV2Pair(pairBX).getReserves();

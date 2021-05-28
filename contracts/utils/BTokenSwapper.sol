@@ -33,7 +33,7 @@ abstract contract BTokenSwapper is IBTokenSwapper {
     }
 
     // swap exact `amountB0` amount of tokenB0 for tokenBX
-    function swapExactB0ForBX(uint256 amountB0, uint256 referencePrice) public override returns (uint256 resultB0, uint256 resultBX) {
+    function swapExactB0ForBX(uint256 amountB0, uint256 referencePrice) external override returns (uint256 resultB0, uint256 resultBX) {
         address caller = msg.sender;
 
         IERC20 tokenB0 = IERC20(addressB0);
@@ -55,7 +55,7 @@ abstract contract BTokenSwapper is IBTokenSwapper {
     }
 
     // swap exact `amountBX` amount of tokenBX token for tokenB0
-    function swapExactBXForB0(uint256 amountBX, uint256 referencePrice) public override returns (uint256 resultB0, uint256 resultBX) {
+    function swapExactBXForB0(uint256 amountBX, uint256 referencePrice) external override returns (uint256 resultB0, uint256 resultBX) {
         address caller = msg.sender;
 
         IERC20 tokenB0 = IERC20(addressB0);
@@ -79,7 +79,7 @@ abstract contract BTokenSwapper is IBTokenSwapper {
     // swap max amount of tokenB0 `amountB0` for exact amount of tokenBX `amountBX`
     // in case `amountB0` is sufficient, the remains will be sent back
     // in case `amountB0` is insufficient, it will be used up to swap for tokenBX
-    function swapB0ForExactBX(uint256 amountB0, uint256 amountBX, uint256 referencePrice) public override returns (uint256 resultB0, uint256 resultBX) {
+    function swapB0ForExactBX(uint256 amountB0, uint256 amountBX, uint256 referencePrice) external override returns (uint256 resultB0, uint256 resultBX) {
         address caller = msg.sender;
 
         IERC20 tokenB0 = IERC20(addressB0);
@@ -115,7 +115,7 @@ abstract contract BTokenSwapper is IBTokenSwapper {
     // swap max amount of tokenBX `amountBX` for exact amount of tokenB0 `amountB0`
     // in case `amountBX` is sufficient, the remains will be sent back
     // in case `amountBX` is insufficient, it will be used up to swap for tokenB0
-    function swapBXForExactB0(uint256 amountB0, uint256 amountBX, uint256 referencePrice) public override returns (uint256 resultB0, uint256 resultBX) {
+    function swapBXForExactB0(uint256 amountB0, uint256 amountBX, uint256 referencePrice) external override returns (uint256 resultB0, uint256 resultBX) {
         address caller = msg.sender;
 
         IERC20 tokenB0 = IERC20(addressB0);
@@ -152,7 +152,7 @@ abstract contract BTokenSwapper is IBTokenSwapper {
     // the previous functions might be blocked
     // anyone can call this function to withdraw any remaining tokenB0/tokenBX in this contract
     // idealy, this contract should have no balance for tokenB0/tokenBX
-    function sync() public override {
+    function sync() external override {
         IERC20 tokenB0 = IERC20(addressB0);
         IERC20 tokenBX = IERC20(addressBX);
         if (tokenB0.balanceOf(address(this)) != 0) tokenB0.safeTransfer(msg.sender, tokenB0.balanceOf(address(this)));

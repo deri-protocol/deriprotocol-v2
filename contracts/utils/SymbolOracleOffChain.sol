@@ -19,14 +19,14 @@ contract SymbolOracleOffChain is IOracleWithUpdate {
         delayAllowance = delayAllowance_;
     }
 
-    function getPrice() public override view returns (uint256) {
+    function getPrice() external override view returns (uint256) {
         require(block.timestamp - timestamp <= delayAllowance, 'price expired');
         return price;
     }
 
     // update oracle price using off chain signed price
     // the signature must be verified in order for the price to be updated
-    function updatePrice(uint256 timestamp_, uint256 price_, uint8 v_, bytes32 r_, bytes32 s_) public override {
+    function updatePrice(uint256 timestamp_, uint256 price_, uint8 v_, bytes32 r_, bytes32 s_) external override {
         uint256 lastTimestamp = timestamp;
         if (timestamp_ > lastTimestamp) {
             if (v_ == 27 || v_ == 28) {

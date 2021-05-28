@@ -35,31 +35,31 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
         _controller = msg.sender;
     }
 
-    function pool() public override view returns (address) {
+    function pool() external override view returns (address) {
         return _pool;
     }
 
-    function liquidatorQualifier() public override view returns (address) {
+    function liquidatorQualifier() external override view returns (address) {
         return _liquidatorQualifierAddress;
     }
 
-    function setPool(address poolAddress) public override _controller_ {
+    function setPool(address poolAddress) external override _controller_ {
         _pool = poolAddress;
     }
 
-    function setLiquidatorQualifier(address qualifierAddress) public override _controller_ {
+    function setLiquidatorQualifier(address qualifierAddress) external override _controller_ {
         _liquidatorQualifierAddress = qualifierAddress;
     }
 
     // during a migration, this function is intended to be called in the source router
-    function approveMigration() public override _controller_ {
+    function approveMigration() external override _controller_ {
         require(_migrationTimestamp != 0 && block.timestamp >= _migrationTimestamp, 'migration time not met');
         address targetPool = IPerpetualPoolRouter(_migrationDestination).pool();
         IPerpetualPool(_pool).approvePoolMigration(targetPool);
     }
 
     // during a migration, this function is intended to be called in the target router
-    function executeMigration(address sourceRouter) public override _controller_ {
+    function executeMigration(address sourceRouter) external override _controller_ {
         uint256 migrationTimestamp_ = IPerpetualPoolRouter(sourceRouter).migrationTimestamp();
         address migrationDestination_ = IPerpetualPoolRouter(sourceRouter).migrationDestination();
 
@@ -76,7 +76,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
         address oracleAddress,
         uint256 discount
     )
-        public override _controller_
+        external override _controller_
     {
         IPerpetualPool.BTokenInfo memory b;
         b.bTokenAddress = bTokenAddress;
@@ -94,7 +94,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
         uint256 feeRatio,
         uint256 fundingRateCoefficient
     )
-        public override _controller_
+        external override _controller_
     {
         IPerpetualPool.SymbolInfo memory s;
         s.symbol = symbol;
@@ -111,7 +111,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
         address oracleAddress,
         uint256 discount
     )
-        public override _controller_
+        external override _controller_
     {
         IPerpetualPool(_pool).setBTokenParameters(bTokenId, swapperAddress, oracleAddress, discount);
     }
@@ -122,7 +122,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
         uint256 feeRatio,
         uint256 fundingRateCoefficient
     )
-        public override _controller_
+        external override _controller_
     {
         IPerpetualPool(_pool).setSymbolParameters(symbolId, oracleAddress, feeRatio, fundingRateCoefficient);
     }
@@ -201,32 +201,32 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
     // Interactions Set2 (supporting oracles which need manual update)
     //================================================================================
 
-    function addLiquidityWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {
+    function addLiquidityWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external override {
         _updateSymbolOracles(infos);
         addLiquidity(bTokenId, bAmount);
     }
 
-    function removeLiquidityWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {
+    function removeLiquidityWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external override {
         _updateSymbolOracles(infos);
         removeLiquidity(bTokenId, bAmount);
     }
 
-    function addMarginWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {
+    function addMarginWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external override {
         _updateSymbolOracles(infos);
         addMargin(bTokenId, bAmount);
     }
 
-    function removeMarginWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) public override {
+    function removeMarginWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external override {
         _updateSymbolOracles(infos);
         removeMargin(bTokenId, bAmount);
     }
 
-    function tradeWithPrices(uint256 symbolId, int256 tradeVolume, PriceInfo[] memory infos) public override {
+    function tradeWithPrices(uint256 symbolId, int256 tradeVolume, PriceInfo[] memory infos) external override {
         _updateSymbolOracles(infos);
         trade(symbolId, tradeVolume);
     }
 
-    function liquidateWithPrices(address owner, PriceInfo[] memory infos) public override {
+    function liquidateWithPrices(address owner, PriceInfo[] memory infos) external override {
         _updateSymbolOracles(infos);
         liquidate(owner);
     }
