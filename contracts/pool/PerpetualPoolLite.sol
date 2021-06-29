@@ -465,6 +465,8 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
                 }
             }
         }
+
+        _lastUpdateBlock = curBlockNumber;
     }
 
     function _getTraderPortfolio(address account) internal view returns (
