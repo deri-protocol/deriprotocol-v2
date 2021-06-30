@@ -21,6 +21,7 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
 
     int256  constant ONE = 10**18;
 
+    uint256 immutable _decimals;
     int256  immutable _minPoolMarginRatio;
     int256  immutable _minInitialMarginRatio;
     int256  immutable _minMaintenanceMarginRatio;
@@ -68,8 +69,7 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
         _liquidatorQualifierAddress = addresses[3];
         _protocolFeeCollector = addresses[4];
 
-        // only supports bToken of decimals 18
-        require(IERC20(addresses[0]).decimals() == 18, 'PerpetualPool: bToken decimals must be 18');
+        _decimals = IERC20(addresses[0]).decimals();
     }
 
     // during a migration, this function is intended to be called in the source pool
@@ -554,11 +554,16 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
     }
 
     function _transferIn(address from, uint256 bAmount) internal returns (uint256) {
-        return _deflationCompatibleSafeTransferFrom(from, address(this), bAmount);
+        uint256 amount = _deflationCompatibleSafeTransferFrom(from, address(this), bAmount.rescale(18, _decimals));
+        return amount.rescale(_decimals, 18);
     }
 
     function _transferOut(address to, uint256 bAmount) internal {
-        IERC20(_bTokenAddress).safeTransfer(to, bAmount);
+        uint256 amount = bAmount.rescale(18, _decimals);
+        uint256 leftover = bAmount - amount.rescale(_decimals, 18);
+        // leftover due to decimal precision is accrued to _protocolFeeAccrued
+        _protocolFeeAccrued += leftover.utoi();
+        IERC20(_bTokenAddress).safeTransfer(to, amount);
     }
 
 }
