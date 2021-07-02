@@ -90,18 +90,21 @@ contract PTokenLite is IPTokenLite, ERC721 {
         require(isActiveSymbolId(symbolId), 'PToken: non-active symbolId');
         require(_numPositionHolders[symbolId] == 0, 'PToken: exists position holders');
 
-        uint256[] memory preSymbolIds = getActiveSymbolIds();
-        uint256[] memory curSymbolIds = new uint256[](preSymbolIds.length - 1);
-        uint256 shift;
-        for (uint256 i = 0; i < preSymbolIds.length; i++) {
-            if (preSymbolIds[i] != symbolId) {
-                curSymbolIds[i-shift] = preSymbolIds[i];
-            } else {
-                shift = 1;
+        uint256 index;
+        uint256 length = _activeSymbolIds.length;
+
+        for (uint256 i = 0; i < length; i++) {
+            if (_activeSymbolIds[i] == symbolId) {
+                index = i;
+                break;
             }
         }
-        _activeSymbolIds = curSymbolIds;
 
+        for (uint256 i = index; i < length - 1; i++) {
+            _activeSymbolIds[i] = _activeSymbolIds[i+1];
+        }
+
+        _activeSymbolIds.pop();
         _isActiveSymbolId[symbolId] = false;
     }
 
