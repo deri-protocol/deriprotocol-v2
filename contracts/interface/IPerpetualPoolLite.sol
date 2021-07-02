@@ -83,6 +83,18 @@ interface IPerpetualPoolLite is IMigratable {
 
     function setSymbolParameters(uint256 symbolId, address oracleAddress, uint256 feeRatio, uint256 fundingRateCoefficient) external;
 
+    function addLiquidity(uint256 bAmount) external;
+
+    function removeLiquidity(uint256 lShares) external;
+
+    function addMargin(uint256 bAmount) external;
+
+    function removeMargin(uint256 bAmount) external;
+
+    function trade(uint256 symbolId, int256 tradeVolume) external;
+
+    function liquidate(address account) external;
+
     function addLiquidity(uint256 bAmount, SignedPrice[] memory prices) external;
 
     function removeLiquidity(uint256 lShares, SignedPrice[] memory prices) external;

@@ -199,7 +199,47 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
 
 
     //================================================================================
-    // Interactions
+    // Interactions with onchain oracles
+    //================================================================================
+
+    function addLiquidity(uint256 bAmount) external override {
+        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
+        _addLiquidity(msg.sender, bAmount);
+    }
+
+    function removeLiquidity(uint256 lShares) external override {
+        require(lShares > 0, 'PerpetualPool: 0 lShares');
+        _removeLiquidity(msg.sender, lShares);
+    }
+
+    function addMargin(uint256 bAmount) external override {
+        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
+        _addMargin(msg.sender, bAmount);
+    }
+
+    function removeMargin(uint256 bAmount) external override {
+        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
+        _removeMargin(msg.sender, bAmount);
+    }
+
+    function trade(uint256 symbolId, int256 tradeVolume) external override {
+        require(IPTokenLite(_pTokenAddress).isActiveSymbolId(symbolId), 'PerpetualPool: invalid symbolId');
+        require(tradeVolume != 0 && tradeVolume / ONE * ONE == tradeVolume, 'PerpetualPool: invalid tradeVolume');
+        _trade(msg.sender, symbolId, tradeVolume);
+    }
+
+    function liquidate(address account) external override {
+        address liquidator = msg.sender;
+        require(
+            _liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(_liquidatorQualifierAddress).isQualifiedLiquidator(liquidator),
+            'PerpetualPool: not qualified liquidator'
+        );
+        _liquidate(liquidator, account);
+    }
+
+
+    //================================================================================
+    // Interactions with offchain oracles
     //================================================================================
 
     function addLiquidity(uint256 bAmount, SignedPrice[] memory prices) external override {
