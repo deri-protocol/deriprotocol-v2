@@ -307,7 +307,11 @@ contract EverlastingOptionPricing {
 
     // input and return in 18 decimals
     function cdf(int256 x) internal pure returns (int256) {
-        if (x < 0) x = -x;
+        bool negative;
+        if (x < 0) {
+            x = -x;
+            negative = true;
+        }
 
         // exp(-x^2 / 2)
         int256 e = exp(-(x * x / ONE / 2));
@@ -321,8 +325,7 @@ contract EverlastingOptionPricing {
                         31535319770000000000 * x / ONE +
                         25548726000000000000;
 
-
-        return ONE - norm * e / denorm;
+        return negative ? norm * e / denorm : ONE - norm * e / denorm;
     }
 
     // S: spot
