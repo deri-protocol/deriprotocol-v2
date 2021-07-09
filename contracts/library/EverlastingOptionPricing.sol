@@ -15,6 +15,7 @@ contract EverlastingOptionPricing {
 
     int256 private constant ONE = 10**18;
     uint256 private constant UONE = 10**18;
+    int256 private constant E = 2718281828459045000;
 
     function utoi(uint256 a) internal pure returns (int256) {
         require(a <= 2**255 - 1);
@@ -328,47 +329,147 @@ contract EverlastingOptionPricing {
         return negative ? norm * e / denorm : ONE - norm * e / denorm;
     }
 
-    // S: spot
-    // K: strike
-    // sigma: volatility
-    // t: expiring period
-    // iterations: divide iterations, P = P1 / 2 + P2 / 4 + P3 / 8 ...
-    // all parameters and return in 18 decimals, except iterations
-    function pricingCall(uint256 S, uint256 K, uint256 sigma, uint256 t, uint256 iterations) internal pure returns (int256) {
-        // ln(S / K)
+    function blackScholesCall(int256 lnSK, uint256 S, uint256 K, uint256 vol, uint256 expiration) internal pure returns (int256) {
+        int256 volT = utoi(vol * sqrt(expiration) / UONE);
+        int256 p1 = lnSK * ONE / volT;
+        int256 p2 = volT / 2;
+        int256 x1 = p1 + p2;
+        int256 x2 = p1 - p2;
+        int256 price = (cdf(x1) * utoi(S) - cdf(x2) * utoi(K)) / ONE;
+        return price;
+    }
+
+    function blackScholesPut(int256 lnSK, uint256 S, uint256 K, uint256 vol, uint256 expiration) internal pure returns (int256) {
+        int256 volT = utoi(vol * sqrt(expiration) / UONE);
+        int256 p1 = lnSK * ONE / volT;
+        int256 p2 = volT / 2;
+        int256 x1 = -p1 + p2;
+        int256 x2 = -p1 - p2;
+        int256 price = (cdf(x1) * utoi(K) - cdf(x2) * utoi(S)) / ONE;
+        return price;
+    }
+
+    /**
+     * Everlasting option pricing (only for funding_frequency=1 case)
+     * S: spot price
+     * K: strike price
+     * vol: volitility
+     * t: funding period (same time scale as volitility)
+     * iterations: divide iterations, P = P1 / 2 + P2 / 4 + P3 / 8 ...
+     *
+     * all parameters and return are in 18 decimals, except iterations
+     *
+     * this function converges slow for very small t
+     * e.x. if allow settlement on every block, for a chain with 30000 blocks a day,
+     * t is approximately 1 / 365 / 30000 (yearly)
+     */
+    function getEverlastingCallPrice(uint256 S, uint256 K, uint256 vol, uint256 t, uint256 iterations) internal pure returns (int256) {
         int256 lnSK = ln(S * UONE / K);
-
+        int256 divider = 2;
         int256 price;
-        for (uint256 i = 1; i < iterations + 1; i++) {
-            // sigma * sqrt(t * i)
-            int256 sigmaT = utoi(sigma * sqrt(t * i) / UONE);
-            int256 x1 = lnSK * ONE / sigmaT + sigmaT / 2;
-            int256 x2 = lnSK * ONE / sigmaT - sigmaT / 2;
 
-            price += (cdf(x1) * utoi(S) / ONE - cdf(x2) * utoi(K) / ONE) / utoi(2**i);
+        for (uint256 i = 1; i < iterations + 1; i++) {
+            price += blackScholesCall(lnSK, S, K, vol, t * i) / divider;
+            divider *= 2;
         }
 
         return price;
     }
 
-    // S: spot
-    // K: strike
-    // sigma: volatility
-    // t: expiring period
-    // iterations: divide iterations, P = P1 / 2 + P2 / 4 + P3 / 8 ...
-    // all parameters and return in 18 decimals, except iterations
-    function pricingPut(uint256 S, uint256 K, uint256 sigma, uint256 t, uint256 iterations) internal pure returns (int256) {
-        // ln(S / K)
+    function getEverlastingPutPrice(uint256 S, uint256 K, uint256 vol, uint256 t, uint256 iterations) internal pure returns (int256) {
         int256 lnSK = ln(S * UONE / K);
-
+        int256 divider = 2;
         int256 price;
-        for (uint256 i = 1; i < iterations + 1; i++) {
-            // sigma * sqrt(t * i)
-            int256 sigmaT = utoi(sigma * sqrt(t * i) / UONE);
-            int256 x1 = -lnSK * ONE / sigmaT + sigmaT / 2;
-            int256 x2 = -lnSK * ONE / sigmaT - sigmaT / 2;
 
-            price += (cdf(x1) * utoi(K) / ONE - cdf(x2) * utoi(S) / ONE) / utoi(2**i);
+        for (uint256 i = 1; i < iterations + 1; i++) {
+            price += blackScholesPut(lnSK, S, K, vol, t * i) / divider;
+            divider *= 2;
+        }
+
+        return price;
+    }
+
+    /**
+     * Everlasting option pricing with converge approximation
+     *
+     * convergePeriod: period to converge, option price expires at mid of this period will be used for
+     * all components in this period
+     *
+     */
+    function getEverlastingCallPriceConverge(uint256 S, uint256 K, uint256 vol, uint256 convergePeriod, uint256 iterations)
+        internal pure returns (int256)
+    {
+        int256 lnSK = ln(S * UONE / K);
+        int256 weight = (E - ONE) * ONE / E;
+        uint256 t = convergePeriod / 2;
+        int256 price;
+
+        for (uint256 i = 1; i < iterations + 1; i++) {
+            price += blackScholesCall(lnSK, S, K, vol, t) * weight / ONE;
+            weight = weight * ONE / E;
+            t += convergePeriod;
+        }
+
+        return price;
+    }
+
+    function getEverlastingPutPriceConverge(uint256 S, uint256 K, uint256 vol, uint256 convergePeriod, uint256 iterations)
+        internal pure returns (int256)
+    {
+        int256 lnSK = ln(S * UONE / K);
+        int256 weight = (E - ONE) * ONE / E;
+        uint256 t = convergePeriod / 2;
+        int256 price;
+
+        for (uint256 i = 1; i < iterations + 1; i++) {
+            price += blackScholesPut(lnSK, S, K, vol, t) * weight / ONE;
+            weight = weight * ONE / E;
+            t += convergePeriod;
+        }
+
+        return price;
+    }
+
+    /**
+     * Everlasting option pricing with converge approximation, utilizing early stop
+     */
+    function getEverlastingCallPriceConvergeEarlyStop(uint256 S, uint256 K, uint256 vol, uint256 convergePeriod, uint256 accuracy)
+        internal pure returns (int256)
+    {
+        int256 lnSK = ln(S * UONE / K);
+        int256 weight = (E - ONE) * ONE / E;
+        uint256 t = convergePeriod / 2;
+        int256 price;
+
+        while (true) {
+            int256 p = blackScholesCall(lnSK, S, K, vol, t) * weight / ONE;
+            price += p;
+
+            if (abs(p * ONE / price) < utoi(accuracy)) break;
+
+            weight = weight * ONE / E;
+            t += convergePeriod;
+        }
+
+        return price;
+    }
+
+    function getEverlastingPutPriceConvergeEarlyStop(uint256 S, uint256 K, uint256 vol, uint256 convergePeriod, uint256 accuracy)
+        internal pure returns (int256)
+    {
+        int256 lnSK = ln(S * UONE / K);
+        int256 weight = (E - ONE) * ONE / E;
+        uint256 t = convergePeriod / 2;
+        int256 price;
+
+        while (true) {
+            int256 p = blackScholesPut(lnSK, S, K, vol, t) * weight / ONE;
+            price += p;
+
+            if (abs(p * ONE / price) < utoi(accuracy)) break;
+
+            weight = weight * ONE / E;
+            t += convergePeriod;
         }
 
         return price;
