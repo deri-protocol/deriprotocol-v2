@@ -430,49 +430,69 @@ contract EverlastingOptionPricing {
         return price;
     }
 
+    // Temp struct to prevent stack too deep
+    struct Params {
+        int256 lnSK;
+        int256 weight;
+        uint256 t;
+        int256 payoff;
+        int256 p;
+        int256 price;
+    }
+
     /**
      * Everlasting option pricing with converge approximation, utilizing early stop
      */
     function getEverlastingCallPriceConvergeEarlyStop(uint256 S, uint256 K, uint256 vol, uint256 convergePeriod, uint256 accuracy)
         internal pure returns (int256)
     {
-        int256 lnSK = ln(S * UONE / K);
-        int256 weight = (E - ONE) * ONE / E;
-        uint256 t = convergePeriod / 2;
-        int256 price;
+        Params memory params;
 
-        while (true) {
-            int256 p = blackScholesCall(lnSK, S, K, vol, t) * weight / ONE;
-            price += p;
+        params.lnSK = ln(S * UONE / K);
+        params.weight = (E - ONE) * ONE / E;
+        params.t = convergePeriod / 2;
+        params.payoff = int256(S > K ? S - K : 0);
 
-            if (abs(p * ONE / price) < utoi(accuracy)) break;
+        // revert if max iterations (50) is reached
+        for (uint256 i = 50; ; i--) {
+            params.p = blackScholesCall(params.lnSK, S, K, vol, params.t) * params.weight / ONE;
+            params.price += params.p;
 
-            weight = weight * ONE / E;
-            t += convergePeriod;
+            if (params.price > params.payoff && abs(params.p * ONE / (params.price - params.payoff)) < utoi(accuracy)) {
+                break;
+            }
+
+            params.weight = params.weight * ONE / E;
+            params.t += convergePeriod;
         }
 
-        return price;
+        return params.price;
     }
 
     function getEverlastingPutPriceConvergeEarlyStop(uint256 S, uint256 K, uint256 vol, uint256 convergePeriod, uint256 accuracy)
         internal pure returns (int256)
     {
-        int256 lnSK = ln(S * UONE / K);
-        int256 weight = (E - ONE) * ONE / E;
-        uint256 t = convergePeriod / 2;
-        int256 price;
+        Params memory params;
 
-        while (true) {
-            int256 p = blackScholesPut(lnSK, S, K, vol, t) * weight / ONE;
-            price += p;
+        params.lnSK = ln(S * UONE / K);
+        params.weight = (E - ONE) * ONE / E;
+        params.t = convergePeriod / 2;
+        params.payoff = int256(K > S ? K - S : 0);
 
-            if (abs(p * ONE / price) < utoi(accuracy)) break;
+        // revert if max iterations (50) is reached
+        for (uint256 i = 50; ; i--) {
+            params.p = blackScholesPut(params.lnSK, S, K, vol, params.t) * params.weight / ONE;
+            params.price += params.p;
 
-            weight = weight * ONE / E;
-            t += convergePeriod;
+            if (params.price > params.payoff && abs(params.p * ONE / (params.price - params.payoff)) < utoi(accuracy)) {
+                break;
+            }
+
+            params.weight = params.weight * ONE / E;
+            params.t += convergePeriod;
         }
 
-        return price;
+        return params.price;
     }
 
 }
