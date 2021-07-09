@@ -38,6 +38,15 @@ interface IERC721 is IERC165 {
     function ownerOf(uint256 tokenId) external view returns (address);
 
     /**
+     * @dev Returns the 'tokenId' owned by 'owner'
+     *
+     * Requirements:
+     *
+     *  - `owner` must exist
+     */
+    function getTokenId(address owner) external view returns (uint256);
+
+    /**
      * @dev Returns the account approved for `tokenId` token.
      *
      * Requirements:

@@ -75,6 +75,10 @@ contract ERC721 is IERC721, ERC165 {
         return _tokenIdOwner[tokenId];
     }
 
+    function getTokenId(address owner) public override view _existsOwner_(owner) returns (uint256) {
+        return _ownerTokenId[owner];
+    }
+
     function getApproved(uint256 tokenId) public override view _existsTokenId_(tokenId) returns (address) {
         return _tokenIdOperator[tokenId];
     }
