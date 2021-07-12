@@ -5,15 +5,13 @@ import "../interface/IEverlastingOption.sol";
 import '../interface/ILTokenOption.sol';
 import '../interface/IPTokenOption.sol';
 import '../interface/IERC20.sol';
-import '../interface/IOracle.sol';
+import '../interface/IOracleViewer.sol';
 import '../interface/ILiquidatorQualifier.sol';
 import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
 import '../utils/Migratable.sol';
-//import '.。/utils/Ownable.sol';
 import {Pricing} from '../pricing/Pricing.sol';
 import {EverlastingOptionPricing} from '../library/EverlastingOptionPricing.sol';
-import "hardhat/console.sol";
 
 
 contract EverlastingOption is IEverlastingOption, Migratable {
@@ -308,11 +306,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             totalAbsCost == 0 || (totalDynamicEquity - bAmount.utoi()) * ONE / totalAbsCost >= _minPoolMarginRatio,
             'PerpetualPool: pool insufficient margin'
         );
-//        console.log("_removeLiquidity: totalSupply", totalSupply);
-//        console.log("_removeLiquidity: totalDynamicEquity");
-//        console.logInt(totalDynamicEquity);
-//        console.log("_removeLiquidity: lShares", lShares);
-//        console.log("_removeLiquidity: bAmount", bAmount);
         lToken.burn(account, lShares);
         _transferOut(account, bAmount);
 
@@ -366,8 +359,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
     function _trade(address account, uint256 symbolId, int256 tradeVolume) internal _lock_ {
         (int256 totalDynamicEquity, int256 totalAbsCost) = _updateSymbolPricesAndFundingRates();
-        console.log("_trade1");
-        console.logInt(totalAbsCost);
 
         (uint256[] memory symbolIds,
          IPTokenOption.Position[] memory positions,
@@ -408,11 +399,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
         // adjust totalAbsCost after trading
 //        totalAbsCost -= (positions[index].volume * (params.intrinsicValue + params.timeValue) / ONE * params.multiplier / ONE).abs();
-//        console.log("_trade2");
-//        console.logInt(totalAbsCost);
 //        totalAbsCost += ((positions[index].volume + tradeVolume) * (params.intrinsicValue + params.timeValue) / ONE * params.multiplier / ONE).abs();
-//        console.log("_trade3");
-//        console.logInt(totalAbsCost);
 
         totalAbsCost += ((params.tradersNetVolume + tradeVolume).abs() - params.tradersNetVolume.abs()) *
                         (params.intrinsicValue + params.timeValue) / ONE * params.multiplier / ONE;
@@ -430,10 +417,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         params.protocolFee = params.fee * _protocolFeeCollectRatio / ONE;
         _protocolFeeAccrued += params.protocolFee;
         _liquidity += params.fee - params.protocolFee + params.realizedCost;
-
-        console.log("EO.trade totalAbsCost totalDynamicEquity");
-        console.logInt(totalAbsCost);
-        console.logInt(totalDynamicEquity);
         require(totalAbsCost == 0 || totalDynamicEquity * ONE / totalAbsCost >= _minPoolMarginRatio, 'PerpetualPool: insufficient liquidity');
         _updateTraderPortfolio(account, symbolIds, positions, positionUpdates, margin);
         require(_getTraderMarginRatio(symbolIds, positions, margin) >= _minInitialMarginRatio, 'PerpetualPool: insufficient margin');
@@ -480,27 +463,21 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     //================================================================================
     function _getIntrinsicValuePrice(uint256 symbolId) public view returns (int256 price) {
         SymbolInfo storage s = _symbols[symbolId];
-        int256 oraclePrice = IOracle(s.oracleAddress).getPrice().utoi();
+        int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
         price = s.isCall ? (oraclePrice - s.strikePrice).max(0) : (s.strikePrice - oraclePrice).max(0);
     }
 
     function _getTimeValuePrice(uint256 symbolId) public view returns (int256) {
         int256 intrinsicPrice = _getIntrinsicValuePrice(symbolId);
         SymbolInfo storage s = _symbols[symbolId];
-        uint256 oraclePrice = IOracle(s.oracleAddress).getPrice();
-//        console.log('oraclePrice %s, strikePrice %s votatility %s', oraclePrice, s.strikePrice.itou(), s.volatility.itou());
-//        console.log("_T", _T);
-//        if (s.isCall) console.log("isCall");
+        uint256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice();
+//        if (s.isCall)
 //        int256 optionPrice = s.isCall
 //            ? OPTIONPRICING.pricingCall(oraclePrice, s.strikePrice.itou(), s.volatility.itou(), _T, 10)
 //            : OPTIONPRICING.pricingPut(oraclePrice, s.strikePrice.itou(), s.volatility.itou(), _T, 10);
         int256 optionPrice = s.isCall
             ? OPTIONPRICING.getEverlastingCallPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), s.volatility.itou(), _T, 10**15)
             : OPTIONPRICING.getEverlastingPutPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), s.volatility.itou(), _T, 10**15);
-//        console.log("getTimeValuePrice");
-//        console.logInt(optionPrice);
-//        console.log("getIntrinsicPrice");
-//        console.logInt(intrinsicPrice);
         int256 price = optionPrice - intrinsicPrice;
         return price;
     }
@@ -513,9 +490,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         VirtualBalance memory updateBalance = PRICING.getExpectedTargetExt(
             side, (_liquidity + s.quote_balance_premium).itou(), timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE).abs().itou(), s.K
         ); // 用_liquidity 而不是 totalDynamicEquity
-
-//        console.log("_getTimeValuePrice.updateBalance baseBalance %s baseTarget %s", updateBalance.baseBalance/10**18, updateBalance.baseTarget/10**18);
-//        console.log("_getTimeValuePrice.updateBalance quoteBalance %s quoteTarget %s", updateBalance.quoteBalance/10**18, updateBalance.quoteTarget/10**18);
         int256 midPrice = (PRICING.getMidPrice(updateBalance, timePrice.itou(), s.K)).utoi();
         return midPrice;
     }
@@ -530,13 +504,9 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         VirtualBalance memory updateBalance = PRICING.getExpectedTargetExt(
             side, (_liquidity + s.quote_balance_premium).itou(), timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE).abs().itou() , s.K
         ); // 用_liquidity 而不是 totalDynamicEquity
-
-//        console.log("_queryTradeWithPMM.oraclePrice", timePrice.itou());
-//        console.log("_queryTradeWithPMM.updateBalance baseBalance %s baseTarget %s", updateBalance.baseBalance, updateBalance.baseTarget);
-//        console.log("_queryTradeWithPMM.updateBalance quoteBalance %s quoteTarget %s", updateBalance.quoteBalance, updateBalance.quoteTarget);
-//        if (updateBalance.newSide == Side.FLAT) console.log("_queryTradeWithPMM.updateBalance.newSide is FLAT");
-//        if (updateBalance.newSide == Side.LONG) console.log("_queryTradeWithPMM.updateBalance.newSide is LONG");
-//        if (updateBalance.newSide == Side.SHORT) console.log("_queryTradeWithPMM.updateBalance.newSide is SHORT");
+//        if (updateBalance.newSide == Side.FLAT)
+//        if (updateBalance.newSide == Side.LONG)
+//        if (updateBalance.newSide == Side.SHORT)
         uint256 deltaQuote;
         if (volume >= 0) {
             (deltaQuote, ) = PRICING._queryBuyBaseToken(
@@ -660,18 +630,12 @@ contract EverlastingOption is IEverlastingOption, Migratable {
                 int256 delta;
                 unchecked { delta = cumulativeDiseqFundingRate - positions[i].lastCumulativeDiseqFundingRate; }
                 funding += positions[i].volume * delta / ONE;
-//                console.log("_settleTraderFundingFee1 _settleTraderFundingFee2 i %s, delta %s", i, delta.itou());
-//                console.log("position[i].volume");
-//                console.logInt(positions[i].volume);
-//                console.logInt(positions[i].volume * delta / ONE);
 
                 positions[i].lastCumulativeDiseqFundingRate = cumulativeDiseqFundingRate;
 
                 int256 cumulativePremiumFundingRate = _symbols[symbolIds[i]].cumulativePremiumFundingRate;
                 unchecked { delta = cumulativePremiumFundingRate - positions[i].lastCumulativePremiumFundingRate; }
-//                console.log("_settleTraderFundingFee1 _settleTraderFundingFee2 i %s, delta %s", i, delta.itou());
                 funding += positions[i].volume * delta / ONE;
-//                console.logInt(positions[i].volume * delta / ONE);
                 positions[i].lastCumulativePremiumFundingRate = cumulativePremiumFundingRate;
 
                 positionUpdates[i] = true;
@@ -698,8 +662,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             }
         }
         int256 marginRatio = totalAbsCost == 0 ? type(int256).max : totalDynamicEquity * ONE / totalAbsCost;
-//        console.log("_getTraderMarginRatio");
-//        console.logInt(marginRatio);
         return marginRatio;
     }
 

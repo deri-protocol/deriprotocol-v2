@@ -9,7 +9,6 @@ pragma solidity >=0.8.0 <0.9.0;
 
 import {SafeMath} from "./SafeMath.sol";
 import {DecimalMath} from "./DecimalMath.sol";
-import "hardhat/console.sol";
 /**
  * @title ParaMath
  * @author Marmot Finance
@@ -94,8 +93,6 @@ library ParaMath {
         } else {
             numerator = squareRoot - b;
         }
-
-        console.log("ParaMath._SolveQuadraticFunctionForTrade numerator %s denominator %s", numerator, denominator);
         if (deltaBSig) {
             return DecimalMath.divFloor(numerator, denominator);
         } else {

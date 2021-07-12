@@ -12,7 +12,6 @@ import {DecimalMath} from "../library/DecimalMath.sol";
 import {PMMCurve} from "../library/PMMCurve.sol";
 import {SafeMath} from "../library/SafeMath.sol";
 import "../interface/IEverlastingOption.sol";
-import "hardhat/console.sol";
 
 
 /**
@@ -96,7 +95,6 @@ contract Pricing {
             R = DecimalMath.ONE - K + (DecimalMath.mul(K, R));
             return DecimalMath.divFloor(oraclePrice, R);
         } else {
-            console.log("Pricing.getMidPrice updateBalance.baseBalance", updateBalance.baseBalance);
             uint256 R =
             DecimalMath.divFloor(
                 updateBalance.baseTarget * updateBalance.baseTarget / updateBalance.baseBalance,
@@ -263,9 +261,7 @@ contract Pricing {
         {
             if (updateBalance.newSide == IEverlastingOption.Side.FLAT) {
                 // case 1: R=1
-                console.log("Pricing._queryBuyBaseToken price %s buyBaseAmount %s updateBalance.baseTarget %s", price, buyBaseAmount, updateBalance.baseTarget);
                 payQuote = PMMCurve._ROneBuyBaseToken(price, K, buyBaseAmount, updateBalance.baseTarget);
-                console.log("Pricing._queryBuyBaseToken finish");
                 newSide = IEverlastingOption.Side.SHORT;
                 newDeltaB = buyBaseAmount;
             } else if (updateBalance.newSide == IEverlastingOption.Side.SHORT) {

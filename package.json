@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "hardhat": "^2.4.1",
-    "hardhat-gas-reporter": "^1.0.4"
+    "hardhat-gas-reporter": "^1.0.4",
+    "hardhat-log-remover": "^2.0.2"
   }
 }

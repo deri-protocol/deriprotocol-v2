@@ -10,7 +10,6 @@ pragma solidity >=0.8.0 <0.9.0;
 import {SafeMath} from "../library/SafeMath.sol";
 import {DecimalMath} from "../library/DecimalMath.sol";
 import {ParaMath} from "../library/ParaMath.sol";
-import "hardhat/console.sol";
 
 
 
@@ -31,8 +30,6 @@ library PMMCurve {
         view
         returns (uint256 receiveQuoteToken)
     {
-        console.log("PMMCurve._ROneSellBaseToken price %s k %s amount %s", price, k, amount);
-        console.log("PMMCurve._ROneSellBaseToken targetQuoteTokenAmount %s", targetQuoteTokenAmount);
         uint256 Q2 =
             ParaMath._SolveQuadraticFunctionForTrade(
                 targetQuoteTokenAmount,
@@ -52,9 +49,7 @@ library PMMCurve {
         returns (uint256 payQuoteToken)
     {
         require(amount < targetBaseTokenAmount, "PARA_BASE_BALANCE_NOT_ENOUGH");
-        console.log("_ROneBuyBaseToken1");
         uint256 B2 = targetBaseTokenAmount - amount;
-        console.log("_ROneBuyBaseToken2 B2", B2);
         payQuoteToken = _RAboveIntegrate(
             price,
             k,
@@ -187,7 +182,6 @@ library PMMCurve {
         uint256 B1,
         uint256 B2
     ) internal view returns (uint256) {
-        console.log("_RAboveIntegrate");
         return ParaMath._GeneralIntegrate(B0, B1, B2, price, k);
     }
 
