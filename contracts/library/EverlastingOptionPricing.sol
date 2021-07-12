@@ -444,7 +444,7 @@ contract EverlastingOptionPricing {
      * Everlasting option pricing with converge approximation, utilizing early stop
      */
     function getEverlastingCallPriceConvergeEarlyStop(uint256 S, uint256 K, uint256 vol, uint256 convergePeriod, uint256 accuracy)
-        internal pure returns (int256)
+        external pure returns (int256)
     {
         Params memory params;
 
@@ -470,7 +470,7 @@ contract EverlastingOptionPricing {
     }
 
     function getEverlastingPutPriceConvergeEarlyStop(uint256 S, uint256 K, uint256 vol, uint256 convergePeriod, uint256 accuracy)
-        internal pure returns (int256)
+        external pure returns (int256)
     {
         Params memory params;
 

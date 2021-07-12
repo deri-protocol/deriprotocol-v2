@@ -1,5 +1,6 @@
 const hre = require('hardhat')
 const { expect } = require('chai')
+const BigNumber = require("bignumber.js");
 
 // rescale
 function one(value=1, left=0, right=18) {
@@ -68,9 +69,10 @@ describe('DeriV2', function () {
         await pool.addSymbol(1, 'ETHUSD', oracleETHUSD.address, one(1, 3), one(1, 3), one(5, 5))
 
         for (account of [account1, account2, account3]) {
-            usdt.mint(account.address, one(100000))
-            usdt.connect(account).approve(pool.address, MAX)
+            await usdt.mint(account.address, one(100000))
+            await usdt.connect(account).approve(pool.address, MAX)
         }
+        console.log("pool", pool)
     })
 
     async function getStates() {
@@ -258,130 +260,131 @@ describe('DeriV2', function () {
     }
 
     it('addLiquidity/removeLiquidity work correctly', async function () {
+        console.log("start")
         await addLiquidity(account1, one(10000), true)
-        await addLiquidity(account2, one(50000), true)
-
-        await expect(removeLiquidity(account1, one(20000), true)).to.be.revertedWith('LToken: burn amount exceeds balance')
-        await removeLiquidity(account1, one(1000), true)
-        await removeLiquidity(account2, one(50000), true)
+        // await addLiquidity(account2, one(50000), true)
+        //
+        // await expect(removeLiquidity(account1, one(20000), true)).to.be.revertedWith('LToken: burn amount exceeds balance')
+        // await removeLiquidity(account1, one(1000), true)
+        // await removeLiquidity(account2, one(50000), true)
     })
 
-    it('addMargin/removeMargin work correctly', async function () {
-        await addLiquidity(account1, one(10000), false)
-        await addLiquidity(account2, one(50000), false)
-
-        await addMargin(account3, one(10000), true)
-        await removeMargin(account3, one(5000), true)
-        await removeMargin(account3, one(10000), true)
-    })
-
-    it('trade/liquidate work correctly', async function () {
-        await addLiquidity(account1, one(10000), false)
-        await addLiquidity(account2, one(50000), false)
-
-        await oracleBTCUSD.setPrice(one(40000))
-        await oracleETHUSD.setPrice(one(2000))
-        await addMargin(account3, one(1000), false)
-
-        await trade(account3, 0, one(1000), true)
-        await trade(account3, 0, one(-2000), true)
-        await expect(trade(account3, 1, one(10000), true)).to.be.revertedWith('PerpetualPool: insufficient margin')
-        await trade(account3, 1, one(1000), true)
-
-        await oracleBTCUSD.setPrice(one(50000))
-        await liquidate(account1, account3, true)
-
-        await collectProtocolFee(account2, true)
-    })
-
-    it('removeSymbol work correctly', async function () {
-        await addLiquidity(account2, one(50000), false)
-
-        await oracleBTCUSD.setPrice(one(40000))
-        await oracleETHUSD.setPrice(one(2000))
-        await addMargin(account3, one(1000), false)
-
-        await trade(account3, 0, one(1000), true)
-        await expect(pool.connect(account1).removeSymbol(0)).to.be.revertedWith('PToken: exists position holders')
-        await trade(account3, 0, one(-1000), true)
-
-        await expect(pool.connect(account2).removeSymbol(0)).to.be.revertedWith('Ownable: only controller')
-        await pool.removeSymbol(0)
-        cur = await getStates()
-        await showDiff(cur, cur)
-
-        await expect(trade(account3, 0, one(1000), true)).to.be.revertedWith('PerpetualPool: invalid symbolId')
-    })
-
-    it('toggleCloseOnly work correctly', async function () {
-        await addLiquidity(account2, one(50000), false)
-
-        await oracleBTCUSD.setPrice(one(40000))
-        await oracleETHUSD.setPrice(one(2000))
-        await addMargin(account3, one(1000), false)
-
-        await trade(account3, 0, one(1000), true)
-        await pool.toggleCloseOnly(0)
-        await expect(trade(account3, 0, one(1000), true)).to.be.revertedWith('PToken: close only')
-        await trade(account3, 0, one(-500), true)
-
-        await pool.toggleCloseOnly(0)
-        await trade(account3, 0, one(500), true)
-        await removeLiquidity(account2, one(10000), true)
-    })
-
-    it('migration work correctly', async function () {
-        await addLiquidity(account1, one(50000), false)
-
-        await oracleBTCUSD.setPrice(one(40000))
-        await oracleETHUSD.setPrice(one(2000))
-
-        await addMargin(account2, one(1000), false)
-        await addMargin(account3, one(1000), false)
-        await trade(account2, 0, one(1000), false)
-        await trade(account2, 1, one(1000), false)
-        await trade(account3, 1, one(-2000), false)
-
-        pool2 = await (await ethers.getContractFactory('PerpetualPoolLite')).deploy(
-            [
-                one(),     // minPoolMarginRatio
-                one(1, 1), // minInitialMarginRatio
-                one(5, 2), // minMaintenanceMarginRatio
-                one(100),  // minLiquidationReward
-                one(1000), // maxLiquidationReward
-                one(5, 1), // liquidationCutRatio
-                one(2, 1)  // protocolFeeCollectRatio
-            ],
-            [
-                usdt.address,     // bTokenAddress
-                lToken.address,   // lTokenAddress
-                pToken.address,   // pTokenAddress
-                ZERO_ADDRESS,     // liquidatorQualifierAddress
-                account1.address, // protocolFeeCollector
-            ]
-        )
-        await pool.prepareMigration(pool2.address, 3)
-        await expect(pool.approveMigration()).to.be.revertedWith('PerpetualPool: migrationTimestamp not met yet')
-
-        await ethers.provider.send('evm_increaseTime', [86400*3])
-        await pool.approveMigration()
-        await expect(removeLiquidity(account1, one(10000))).to.be.revertedWith('LToken: only pool')
-        await expect(trade(account2, 0, one(-1000))).to.be.revertedWith('PToken: only pool')
-
-        source = pool.address
-        pool = pool2
-        await usdt.connect(account2).approve(pool.address, MAX)
-        await addMargin(account2, one(1000), true)
-
-        await pool.executeMigration(source)
-        expect(await usdt.balanceOf(source)).to.equal(0)
-        expect(await usdt.balanceOf(pool2.address)).to.equal(one(53000))
-
-        await oracleBTCUSD.setPrice(one(31000))
-        await oracleETHUSD.setPrice(one(1100))
-        await liquidate(account1, account2, true)
-        await trade(account3, 1, one(2000), true)
-        await removeMargin(account3, one(3000), true)
-    })
+    // it('addMargin/removeMargin work correctly', async function () {
+    //     await addLiquidity(account1, one(10000), false)
+    //     await addLiquidity(account2, one(50000), false)
+    //
+    //     await addMargin(account3, one(10000), true)
+    //     await removeMargin(account3, one(5000), true)
+    //     await removeMargin(account3, one(10000), true)
+    // })
+    //
+    // it('trade/liquidate work correctly', async function () {
+    //     await addLiquidity(account1, one(10000), false)
+    //     await addLiquidity(account2, one(50000), false)
+    //
+    //     await oracleBTCUSD.setPrice(one(40000))
+    //     await oracleETHUSD.setPrice(one(2000))
+    //     await addMargin(account3, one(1000), false)
+    //
+    //     await trade(account3, 0, one(1000), true)
+    //     await trade(account3, 0, one(-2000), true)
+    //     await expect(trade(account3, 1, one(10000), true)).to.be.revertedWith('PerpetualPool: insufficient margin')
+    //     await trade(account3, 1, one(1000), true)
+    //
+    //     await oracleBTCUSD.setPrice(one(50000))
+    //     await liquidate(account1, account3, true)
+    //
+    //     await collectProtocolFee(account2, true)
+    // })
+    //
+    // it('removeSymbol work correctly', async function () {
+    //     await addLiquidity(account2, one(50000), false)
+    //
+    //     await oracleBTCUSD.setPrice(one(40000))
+    //     await oracleETHUSD.setPrice(one(2000))
+    //     await addMargin(account3, one(1000), false)
+    //
+    //     await trade(account3, 0, one(1000), true)
+    //     await expect(pool.connect(account1).removeSymbol(0)).to.be.revertedWith('PToken: exists position holders')
+    //     await trade(account3, 0, one(-1000), true)
+    //
+    //     await expect(pool.connect(account2).removeSymbol(0)).to.be.revertedWith('Ownable: only controller')
+    //     await pool.removeSymbol(0)
+    //     cur = await getStates()
+    //     await showDiff(cur, cur)
+    //
+    //     await expect(trade(account3, 0, one(1000), true)).to.be.revertedWith('PerpetualPool: invalid symbolId')
+    // })
+    //
+    // it('toggleCloseOnly work correctly', async function () {
+    //     await addLiquidity(account2, one(50000), false)
+    //
+    //     await oracleBTCUSD.setPrice(one(40000))
+    //     await oracleETHUSD.setPrice(one(2000))
+    //     await addMargin(account3, one(1000), false)
+    //
+    //     await trade(account3, 0, one(1000), true)
+    //     await pool.toggleCloseOnly(0)
+    //     await expect(trade(account3, 0, one(1000), true)).to.be.revertedWith('PToken: close only')
+    //     await trade(account3, 0, one(-500), true)
+    //
+    //     await pool.toggleCloseOnly(0)
+    //     await trade(account3, 0, one(500), true)
+    //     await removeLiquidity(account2, one(10000), true)
+    // })
+    //
+    // it('migration work correctly', async function () {
+    //     await addLiquidity(account1, one(50000), false)
+    //
+    //     await oracleBTCUSD.setPrice(one(40000))
+    //     await oracleETHUSD.setPrice(one(2000))
+    //
+    //     await addMargin(account2, one(1000), false)
+    //     await addMargin(account3, one(1000), false)
+    //     await trade(account2, 0, one(1000), false)
+    //     await trade(account2, 1, one(1000), false)
+    //     await trade(account3, 1, one(-2000), false)
+    //
+    //     pool2 = await (await ethers.getContractFactory('PerpetualPoolLite')).deploy(
+    //         [
+    //             one(),     // minPoolMarginRatio
+    //             one(1, 1), // minInitialMarginRatio
+    //             one(5, 2), // minMaintenanceMarginRatio
+    //             one(100),  // minLiquidationReward
+    //             one(1000), // maxLiquidationReward
+    //             one(5, 1), // liquidationCutRatio
+    //             one(2, 1)  // protocolFeeCollectRatio
+    //         ],
+    //         [
+    //             usdt.address,     // bTokenAddress
+    //             lToken.address,   // lTokenAddress
+    //             pToken.address,   // pTokenAddress
+    //             ZERO_ADDRESS,     // liquidatorQualifierAddress
+    //             account1.address, // protocolFeeCollector
+    //         ]
+    //     )
+    //     await pool.prepareMigration(pool2.address, 3)
+    //     await expect(pool.approveMigration()).to.be.revertedWith('PerpetualPool: migrationTimestamp not met yet')
+    //
+    //     await ethers.provider.send('evm_increaseTime', [86400*3])
+    //     await pool.approveMigration()
+    //     await expect(removeLiquidity(account1, one(10000))).to.be.revertedWith('LToken: only pool')
+    //     await expect(trade(account2, 0, one(-1000))).to.be.revertedWith('PToken: only pool')
+    //
+    //     source = pool.address
+    //     pool = pool2
+    //     await usdt.connect(account2).approve(pool.address, MAX)
+    //     await addMargin(account2, one(1000), true)
+    //
+    //     await pool.executeMigration(source)
+    //     expect(await usdt.balanceOf(source)).to.equal(0)
+    //     expect(await usdt.balanceOf(pool2.address)).to.equal(one(53000))
+    //
+    //     await oracleBTCUSD.setPrice(one(31000))
+    //     await oracleETHUSD.setPrice(one(1100))
+    //     await liquidate(account1, account2, true)
+    //     await trade(account3, 1, one(2000), true)
+    //     await removeMargin(account3, one(3000), true)
+    // })
 
 })
