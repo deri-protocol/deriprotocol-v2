@@ -24,6 +24,36 @@ contract Pricing {
     using SafeMath for uint256;
     using SafeMath for int256;
 
+    function getTvMidPrice(uint256 timePrice, int256 deltaB, uint256 equity, uint256 K) external view returns (uint256) {
+        IEverlastingOption.Side side = deltaB == 0 ? IEverlastingOption.Side.FLAT : (deltaB > 0 ? IEverlastingOption.Side.SHORT : IEverlastingOption.Side.LONG);
+        IEverlastingOption.VirtualBalance memory updateBalance = getExpectedTargetExt(
+            side, equity, timePrice, deltaB.abs().itou(), K
+        );
+        uint256 midPrice = getMidPrice(updateBalance, timePrice, K);
+        return midPrice;
+    }
+
+    function queryTradePMM(uint256 timePrice, int256 deltaB, int256 volume, uint256 equity, uint256 K) external view returns (int256) {
+        IEverlastingOption.Side side = deltaB == 0 ? IEverlastingOption.Side.FLAT : (deltaB > 0 ? IEverlastingOption.Side.SHORT : IEverlastingOption.Side.LONG);
+        IEverlastingOption.VirtualBalance memory updateBalance = getExpectedTargetExt(
+            side, equity, timePrice, deltaB.abs().itou(), K
+        );
+        uint256 deltaQuote;
+        int256 tvCost;
+        if (volume >= 0) {
+            (deltaQuote, ) = _queryBuyBaseToken(
+                updateBalance, timePrice, K, volume.itou()
+            );
+            tvCost = deltaQuote.utoi();
+        } else {
+            (deltaQuote, ) = _querySellBaseToken(
+                updateBalance, timePrice, K, (-volume).itou()
+            );
+            tvCost = -(deltaQuote.utoi());
+        }
+        return tvCost;
+    }
+
 
     // ============ Helper functions ============
     function _expectedTargetHelperWhenBiased(

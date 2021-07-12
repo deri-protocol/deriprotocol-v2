@@ -2,9 +2,9 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-import '../interface/IVolitilityOracle.sol';
+import '../interface/IVolatilityOracle.sol';
 
-contract VolitilityOracleOffChain is IVolitilityOracle {
+contract VolatilityOracleOffChain is IVolatilityOracle {
 
     string  public symbol;
     address public signatory;
