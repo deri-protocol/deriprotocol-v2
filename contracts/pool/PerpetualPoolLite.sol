@@ -363,6 +363,7 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
 
     // struct for temp use in trade function, to prevent stack too deep error
     struct TradeParams {
+        int256 tradersNetVolume;
         int256 price;
         int256 multiplier;
         int256 curCost;
@@ -388,6 +389,7 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
 
         TradeParams memory params;
 
+        params.tradersNetVolume = _symbols[symbolId].tradersNetVolume;
         params.price = _symbols[symbolId].price;
         params.multiplier = _symbols[symbolId].multiplier;
         params.curCost = tradeVolume * params.price / ONE * params.multiplier / ONE;
@@ -406,8 +408,8 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
         }
 
         // adjust totalAbsCost after trading
-        totalAbsCost -= (positions[index].volume * params.price / ONE * params.multiplier / ONE).abs();
-        totalAbsCost += ((positions[index].volume + tradeVolume) * params.price / ONE * params.multiplier / ONE).abs();
+        totalAbsCost += ((params.tradersNetVolume + tradeVolume).abs() - params.tradersNetVolume.abs()) *
+                        params.price / ONE * params.multiplier / ONE;
 
         positions[index].volume += tradeVolume;
         positions[index].cost += params.curCost - params.realizedCost;
