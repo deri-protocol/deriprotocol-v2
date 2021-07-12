@@ -11,10 +11,8 @@ import '../interface/ILiquidatorQualifier.sol';
 import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
 import '../utils/Migratable.sol';
-
 import {Pricing} from '../pricing/Pricing.sol';
 import {EverlastingOptionPricing} from '../library/EverlastingOptionPricing.sol';
-
 
 contract EverlastingOption is IEverlastingOption, Migratable {
 
@@ -436,10 +434,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
                 params.realizedCost = positions[index].cost * absTradeVolume / absVolume + params.curCost;
             }
         }
-
-        // adjust totalAbsCost after trading
-//        totalAbsCost -= (positions[index].volume * (params.intrinsicValue + params.timeValue) / ONE * params.multiplier / ONE).abs();
-//        totalAbsCost += ((positions[index].volume + tradeVolume) * (params.intrinsicValue + params.timeValue) / ONE * params.multiplier / ONE).abs();
 
         totalAbsCost += ((params.tradersNetVolume + tradeVolume).abs() - params.tradersNetVolume.abs()) *
                         (params.intrinsicValue + params.timeValue) / ONE * params.multiplier / ONE;

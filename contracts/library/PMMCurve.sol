@@ -181,7 +181,7 @@ library PMMCurve {
         uint256 B0,
         uint256 B1,
         uint256 B2
-    ) internal view returns (uint256) {
+    ) internal pure returns (uint256) {
         return ParaMath._GeneralIntegrate(B0, B1, B2, price, k);
     }
 
