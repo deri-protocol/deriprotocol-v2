@@ -6,10 +6,12 @@ import '../interface/ILTokenOption.sol';
 import '../interface/IPTokenOption.sol';
 import '../interface/IERC20.sol';
 import '../interface/IOracleViewer.sol';
+import '../interface/IVolatilityOracle.sol';
 import '../interface/ILiquidatorQualifier.sol';
 import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
 import '../utils/Migratable.sol';
+
 import {Pricing} from '../pricing/Pricing.sol';
 import {EverlastingOptionPricing} from '../library/EverlastingOptionPricing.sol';
 
@@ -23,8 +25,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     Pricing public PRICING;
     EverlastingOptionPricing public OPTIONPRICING;
     int256  constant ONE = 10**18;
-    uint256 public _T = 10**18 / uint256(365); // premium funding period = 1 hour (in one year scale)
-    int256 public _premiumFundingCoefficient = 10**18 / int256(3600*24); // premium funding rate per sec
+    uint256 public _T = 10**18 / uint256(365); // premium funding period = 1 day
+    int256 public _premiumFundingCoefficient = 10**18 / int256(3600*24); // premium funding rate per second
 
     uint256 immutable _decimals;
     int256  immutable _minPoolMarginRatio;
@@ -179,10 +181,10 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         uint256 strikePrice,
         bool    isCall,
         address oracleAddress,
+        address volatilityAddress,
         uint256 multiplier,
         uint256 feeRatio,
         uint256 diseqFundingCoefficient,
-        uint256 volatility,
         uint256 k
     ) external override _controller_ {
         SymbolInfo storage s = _symbols[symbolId];
@@ -191,10 +193,10 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         s.strikePrice = int256(strikePrice);
         s.isCall = isCall;
         s.oracleAddress = oracleAddress;
+        s.volatilityAddress = volatilityAddress;
         s.multiplier = int256(multiplier);
         s.feeRatio = int256(feeRatio);
         s.diseqFundingCoefficient = int256(diseqFundingCoefficient);
-        s.volatility = int256(volatility);
         s.K = k;
         IPTokenOption(_pTokenAddress).addSymbolId(symbolId);
     }
@@ -211,16 +213,16 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     function setSymbolParameters(
         uint256 symbolId,
         address oracleAddress,
+        address volatilityAddress,
         uint256 feeRatio,
         uint256 diseqFundingCoefficient,
-        uint256 volatility,
         uint256 k
     ) external override _controller_ {
         SymbolInfo storage s = _symbols[symbolId];
         s.oracleAddress = oracleAddress;
+        s.volatilityAddress = volatilityAddress;
         s.feeRatio = int256(feeRatio);
         s.diseqFundingCoefficient = int256(diseqFundingCoefficient);
-        s.volatility = int256(volatility);
         s.K = k;
     }
 
@@ -229,6 +231,44 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _T = T;
     }
 
+    //================================================================================
+    // Interactions with onchain oracles
+    //================================================================================
+
+    function addLiquidity(uint256 bAmount) external override {
+        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
+        _addLiquidity(msg.sender, bAmount);
+    }
+
+    function removeLiquidity(uint256 lShares) external override {
+        require(lShares > 0, 'PerpetualPool: 0 lShares');
+        _removeLiquidity(msg.sender, lShares);
+    }
+
+    function addMargin(uint256 bAmount) external override {
+        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
+        _addMargin(msg.sender, bAmount);
+    }
+
+    function removeMargin(uint256 bAmount) external override {
+        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
+        _removeMargin(msg.sender, bAmount);
+    }
+
+    function trade(uint256 symbolId, int256 tradeVolume) external override {
+        require(IPTokenOption(_pTokenAddress).isActiveSymbolId(symbolId), 'PerpetualPool: invalid symbolId');
+        require(tradeVolume != 0 && tradeVolume / ONE * ONE == tradeVolume, 'PerpetualPool: invalid tradeVolume');
+        _trade(msg.sender, symbolId, tradeVolume);
+    }
+
+    function liquidate(address account) external override {
+        address liquidator = msg.sender;
+        require(
+            _liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(_liquidatorQualifierAddress).isQualifiedLiquidator(liquidator),
+            'PerpetualPool: not qualified liquidator'
+        );
+        _liquidate(liquidator, account);
+    }
 
     //================================================================================
     // Interactions
@@ -471,54 +511,62 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 intrinsicPrice = _getIntrinsicValuePrice(symbolId);
         SymbolInfo storage s = _symbols[symbolId];
         uint256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice();
-//        if (s.isCall)
-//        int256 optionPrice = s.isCall
-//            ? OPTIONPRICING.pricingCall(oraclePrice, s.strikePrice.itou(), s.volatility.itou(), _T, 10)
-//            : OPTIONPRICING.pricingPut(oraclePrice, s.strikePrice.itou(), s.volatility.itou(), _T, 10);
+        uint256 volatility = IVolatilityOracle(s.volatilityAddress).getVolitility();
         int256 optionPrice = s.isCall
-            ? OPTIONPRICING.getEverlastingCallPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), s.volatility.itou(), _T, 10**15)
-            : OPTIONPRICING.getEverlastingPutPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), s.volatility.itou(), _T, 10**15);
+            ? OPTIONPRICING.getEverlastingCallPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), volatility, _T, 10**16)
+            : OPTIONPRICING.getEverlastingPutPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), volatility, _T, 10**16);
         int256 price = optionPrice - intrinsicPrice;
         return price;
     }
+
+//    function _getTvMidPrice(uint256 symbolId) public view returns (int256) {
+//        int256 timePrice = _getTimeValuePrice(symbolId);
+//        if (_liquidity <= 0) return timePrice;
+//        SymbolInfo storage s = _symbols[symbolId];
+//        Side side = s.tradersNetVolume == 0 ? Side.FLAT : (s.tradersNetVolume > 0 ? Side.SHORT : Side.LONG);
+//        VirtualBalance memory updateBalance = PRICING.getExpectedTargetExt(
+//            side, (_liquidity + s.quote_balance_premium).itou(), timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE).abs().itou(), s.K
+//        ); // 用_liquidity 而不是 totalDynamicEquity
+//        int256 midPrice = (PRICING.getMidPrice(updateBalance, timePrice.itou(), s.K)).utoi();
+//        return midPrice;
+//    }
 
     function _getTvMidPrice(uint256 symbolId) public view returns (int256) {
         int256 timePrice = _getTimeValuePrice(symbolId);
         if (_liquidity <= 0) return timePrice;
         SymbolInfo storage s = _symbols[symbolId];
-        Side side = s.tradersNetVolume == 0 ? Side.FLAT : (s.tradersNetVolume > 0 ? Side.SHORT : Side.LONG);
-        VirtualBalance memory updateBalance = PRICING.getExpectedTargetExt(
-            side, (_liquidity + s.quote_balance_premium).itou(), timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE).abs().itou(), s.K
-        ); // 用_liquidity 而不是 totalDynamicEquity
-        int256 midPrice = (PRICING.getMidPrice(updateBalance, timePrice.itou(), s.K)).utoi();
-        return midPrice;
+        uint256 midPrice = PRICING.getTvMidPrice(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), (_liquidity + s.quote_balance_premium).itou(), s.K);
+        return midPrice.utoi();
     }
 
 
+//    function _queryTradePMM(uint256 symbolId, int256 volume) public view returns (int256 tvCost) {
+//        require(volume != 0, "invalid tradeVolume");
+//        int256 timePrice = _getTimeValuePrice(symbolId);
+//        SymbolInfo storage s = _symbols[symbolId];
+//        Side side = s.tradersNetVolume == 0 ? Side.FLAT : (s.tradersNetVolume > 0 ? Side.SHORT : Side.LONG);
+//        VirtualBalance memory updateBalance = PRICING.getExpectedTargetExt(
+//            side, (_liquidity + s.quote_balance_premium).itou(), timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE).abs().itou() , s.K
+//        );
+//        uint256 deltaQuote;
+//        if (volume >= 0) {
+//            (deltaQuote, ) = PRICING._queryBuyBaseToken(
+//                updateBalance, timePrice.itou(), s.K, volume.itou()
+//            );
+//            tvCost = deltaQuote.utoi();
+//        } else {
+//            (deltaQuote, ) = PRICING._querySellBaseToken(
+//                updateBalance, timePrice.itou(), s.K, (- volume).itou()
+//            );
+//            tvCost = -(deltaQuote.utoi());
+//        }
+//    }
 
     function _queryTradePMM(uint256 symbolId, int256 volume) public view returns (int256 tvCost) {
         require(volume != 0, "invalid tradeVolume");
         int256 timePrice = _getTimeValuePrice(symbolId);
         SymbolInfo storage s = _symbols[symbolId];
-        Side side = s.tradersNetVolume == 0 ? Side.FLAT : (s.tradersNetVolume > 0 ? Side.SHORT : Side.LONG);
-        VirtualBalance memory updateBalance = PRICING.getExpectedTargetExt(
-            side, (_liquidity + s.quote_balance_premium).itou(), timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE).abs().itou() , s.K
-        ); // 用_liquidity 而不是 totalDynamicEquity
-//        if (updateBalance.newSide == Side.FLAT)
-//        if (updateBalance.newSide == Side.LONG)
-//        if (updateBalance.newSide == Side.SHORT)
-        uint256 deltaQuote;
-        if (volume >= 0) {
-            (deltaQuote, ) = PRICING._queryBuyBaseToken(
-                updateBalance, timePrice.itou(), s.K, volume.itou()
-            );
-            tvCost = deltaQuote.utoi();
-        } else {
-            (deltaQuote, ) = PRICING._querySellBaseToken(
-                updateBalance, timePrice.itou(), s.K, (- volume).itou()
-            );
-            tvCost = -(deltaQuote.utoi());
-        }
+        tvCost = PRICING.queryTradePMM(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), volume, (_liquidity + s.quote_balance_premium).itou(),  s.K);
     }
 
     function _updateQuoteBalance(uint256 symbolId, int256 addBalance) internal {
@@ -541,7 +589,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 //            }
 //        }
 //    }
-
 
     function _updateSymbolPricesAndFundingRates() internal returns (int256 totalDynamicEquity, int256 totalAbsCost) {
         uint256 preTimestamp = _lastTimestamp;

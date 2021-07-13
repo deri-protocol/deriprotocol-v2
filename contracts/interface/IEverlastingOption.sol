@@ -10,6 +10,7 @@ interface IEverlastingOption is IMigratable {
         uint256 symbolId;
         string  symbol;
         address oracleAddress; // spot price oracle
+        address volatilityAddress; // iv oracle
         int256  multiplier;
         int256  feeRatio;
         int256  strikePrice;
@@ -22,7 +23,6 @@ interface IEverlastingOption is IMigratable {
         int256  tradersNetVolume;
         int256  tradersNetCost;
         int256  quote_balance_premium;
-        int256  volatility;
         uint256 K;
     }
 
@@ -91,10 +91,10 @@ interface IEverlastingOption is IMigratable {
         uint256 strikePrice,
         bool    isCall,
         address oracleAddress,
+        address volatilityAddress,
         uint256 multiplier,
         uint256 feeRatio,
         uint256 diseqFundingCoefficient,
-        uint256 volatility,
         uint256 k
     ) external;
 
@@ -105,11 +105,23 @@ interface IEverlastingOption is IMigratable {
     function setSymbolParameters(
         uint256 symbolId,
         address oracleAddress,
+        address volatilityAddress,
         uint256 feeRatio,
         uint256 diseqFundingCoefficient,
-        uint256 volatility,
         uint256 k
     ) external;
+
+    function addLiquidity(uint256 bAmount) external;
+
+    function removeLiquidity(uint256 lShares) external;
+
+    function addMargin(uint256 bAmount) external;
+
+    function removeMargin(uint256 bAmount) external;
+
+    function trade(uint256 symbolId, int256 tradeVolume) external;
+
+    function liquidate(address account) external;
 
     function addLiquidity(uint256 bAmount, OraclePrice[] memory prices) external;
 
