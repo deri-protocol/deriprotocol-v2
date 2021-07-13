@@ -26,7 +26,7 @@ interface IEverlastingOption is IMigratable {
         uint256 K;
     }
 
-    struct OraclePrice {
+    struct SignedPrice {
         uint256 symbolId;
         uint256 timestamp;
         uint256 price;

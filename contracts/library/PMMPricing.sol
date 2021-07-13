@@ -20,7 +20,7 @@ import "../interface/IEverlastingOption.sol";
  *
  * @notice Parapara Pricing model
  */
-contract Pricing {
+contract PMMPricing {
     using SafeMath for uint256;
     using SafeMath for int256;
 

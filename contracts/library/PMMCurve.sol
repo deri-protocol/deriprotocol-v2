@@ -23,8 +23,7 @@ library PMMCurve {
 
 
     // ============ R = 1 cases ============
-    // 卖ETH, 得USD
-    // Solving the quadratic equation for trading 求解Q2
+    // Solving the quadratic equation for trading
     function _ROneSellBaseToken(uint256 price, uint256 k, uint256 amount, uint256 targetQuoteTokenAmount)
         internal
         view
