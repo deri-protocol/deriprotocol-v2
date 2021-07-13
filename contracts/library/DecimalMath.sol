@@ -1,9 +1,4 @@
-/*
-
-    Copyright 2021 Marmot Finance
-    SPDX-License-Identifier: Apache-2.0
-
-*/
+// SPDX-License-Identifier: MIT
 
 pragma solidity >=0.8.0 <0.9.0;
 
@@ -11,7 +6,7 @@ import {SafeMath} from "./SafeMath.sol";
 
 /**
  * @title DecimalMath
- * @author DODO Breeder
+ * @author Deri Protocol
  *
  * @notice Functions for fixed point number with 18 decimals
  */

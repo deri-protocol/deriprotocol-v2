@@ -1,9 +1,4 @@
-/*
-
-    Copyright 2021 Marmot Finance.
-    SPDX-License-Identifier: Apache-2.0
-
-*/
+// SPDX-License-Identifier: MIT
 
 pragma solidity >=0.8.0 <0.9.0;
 
@@ -15,7 +10,7 @@ import {ParaMath} from "../library/ParaMath.sol";
 
 /**
  * @title Pricing
- * @author Marmot Finance
+ * @author Deri Protocol
  * @notice Parapara Pricing model
  */
 library PMMCurve {
