@@ -37,6 +37,7 @@ describe('DeriV2', function () {
     let oracleBTCUSDTV1
     let oracleBTCUSDTV2
     let oracleETHUSDTV1
+    let volatilityOracle
 
     let pricing
     let everlastingOptionPricing
@@ -50,8 +51,8 @@ describe('DeriV2', function () {
         alice.name = 'alice'
         bob.name = 'bob'
 
-        usdt = await (await ethers.getContractFactory('TERC20')).deploy('Test USDT', 'USDT', 18)
-        pricing = await (await ethers.getContractFactory('Pricing')).deploy()
+        usdt = await (await ethers.getContractFactory('TERC20')).deploy('Test USDT', 'USDT', 6)
+        pricing = await (await ethers.getContractFactory('PMMPricing')).deploy()
         everlastingOptionPricing = await (await ethers.getContractFactory('EverlastingOptionPricing')).deploy()
         lToken = await (await ethers.getContractFactory('LTokenOption')).deploy('Deri Liquidity Token', 'DLT')
         pToken = await (await ethers.getContractFactory('PTokenOption')).deploy('Deri Position Token', 'DPT')
@@ -78,43 +79,56 @@ describe('DeriV2', function () {
         await lToken.setPool(pool.address)
         await pToken.setPool(pool.address)
 
-        oracleBTCUSD = await (await ethers.getContractFactory('NaiveOracle')).deploy()
-        oracleBTCUSDTV1 = await (await ethers.getContractFactory('NaiveOracle')).deploy()
-        oracleBTCUSDTV2 = await (await ethers.getContractFactory('NaiveOracle')).deploy()
-        oracleETHUSD = await (await ethers.getContractFactory('NaiveOracle')).deploy()
-        oracleETHUSDTV1 = await (await ethers.getContractFactory('NaiveOracle')).deploy()
-        await oracleBTCUSD.setPrice(decimalStr(40000))
-        await oracleBTCUSDTV1.setPrice(decimalStr(20))
-        await oracleBTCUSDTV2.setPrice(decimalStr(10))
-        await oracleETHUSD.setPrice(decimalStr(3000))
-        await oracleETHUSDTV1.setPrice(decimalStr(3))
+        // oracleBTCUSD = await (await ethers.getContractFactory('NaiveOracle')).deploy()
+        // oracleBTCUSDTV1 = await (await ethers.getContractFactory('NaiveOracle')).deploy()
+        // oracleBTCUSDTV2 = await (await ethers.getContractFactory('NaiveOracle')).deploy()
+        // oracleETHUSD = await (await ethers.getContractFactory('NaiveOracle')).deploy()
+        // oracleETHUSDTV1 = await (await ethers.getContractFactory('NaiveOracle')).deploy()
+        // await oracleBTCUSD.setPrice(decimalStr(40000))
+        // await oracleBTCUSDTV1.setPrice(decimalStr(20))
+        // await oracleBTCUSDTV2.setPrice(decimalStr(10))
+        // await oracleETHUSD.setPrice(decimalStr(3000))
+        // await oracleETHUSDTV1.setPrice(decimalStr(3))
 
+
+        oracleBTCUSD = await ethers.getContractAt("SymbolOracleWoo", "0x78Db6d02EE87260a5D825B31616B5C29f927E430")
+        oracleETHUSD = await ethers.getContractAt("SymbolOracleWoo", "0xdF0050D6A07C19C6F6505d3e66B68c29F41edA09")
+
+
+        volatilityOracle = await (await ethers.getContractFactory("VolatilityOracleOffChainMock")).deploy(
+            "VOLA",
+            "0x4C059dD7b01AAECDaA3d2cAf4478f17b9c690080",
+            decimalStr("10"))
+        await volatilityOracle.updateVolitility(1, decimalStr(1), 0, ethers.constants.HashZero, ethers.constants.HashZero)
 
         await pool.addSymbol(
             0, 'BTCUSD-30000-C',
             decimalStr("30000"), // strikePrice
             true, // isCall
-            oracleBTCUSD.address, decimalStr("0.0001"), decimalStr("0.001"),
+            oracleBTCUSD.address,
+            volatilityOracle.address,
+            decimalStr("0.0001"), decimalStr("0.001"),
             decimalStr("0.00005"),
-            decimalStr(1), //volatility 100% 年化
             decimalStr("0.999") // K
             )
         await pool.addSymbol(
             1, 'BTCUSD-50000-P',
             decimalStr("50000"), // strikePrice
             false, // isCall
-            oracleBTCUSD.address, decimalStr("0.0001"), decimalStr("0.001"),
+            oracleBTCUSD.address,
+            volatilityOracle.address,
+            decimalStr("0.0001"), decimalStr("0.001"),
             decimalStr("0.00005"),
-            decimalStr(1), //volatility 100% 年化)
             decimalStr("0.999") // K
         )
         await pool.addSymbol(
             2, 'ETHUSD-3000-C',
             decimalStr("3000"), // strikePrice
             true, // isCall
-            oracleETHUSD.address, decimalStr("0.0001"), decimalStr("0.001"),
+            oracleETHUSD.address,
+            volatilityOracle.address,
+            decimalStr("0.0001"), decimalStr("0.001"),
             decimalStr("0.00005"),
-            decimalStr(1), //volatility 100% 年化)
             decimalStr("0.999") // K
         )
 
@@ -267,8 +281,11 @@ describe('DeriV2', function () {
             tx = await pool.connect(account).addLiquidity(bAmount, [])
             cur = await getStates()
             await showDiff(pre, cur, `${account.name}.addLiquidity(${ethers.utils.formatEther(bAmount)})`, tx)
-        } else {
-            tx = await pool.connect(account).addLiquidity(bAmount, [])
+        } else
+            {
+                tx = await (pool.connect(account).functions['addLiquidity(uint256,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
+                    bAmount, []))
+            // tx = await pool.connect(account).addLiquidity(bAmount, [])
         }
     }
 
@@ -280,7 +297,9 @@ describe('DeriV2', function () {
             cur = await getStates()
             await showDiff(pre, cur, `${account.name}.removeLiquidity(${ethers.utils.formatEther(bAmount)})`, tx)
         } else {
-            tx = await pool.connect(account).removeLiquidity(bAmount, [])
+            tx = await (pool.connect(account).functions['removeLiquidity(uint256,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
+                    bAmount, []))
+            // tx = await pool.connect(account).removeLiquidity(bAmount, [])
         }
     }
 
@@ -292,7 +311,9 @@ describe('DeriV2', function () {
             cur = await getStates()
             await showDiff(pre, cur, `${account.name}.addMargin(${ethers.utils.formatEther(bAmount)})`, tx)
         } else {
-            tx = await pool.connect(account).addMargin(bAmount, [])
+            tx = await (pool.connect(account).functions['addMargin(uint256,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
+                    bAmount, []))
+            // tx = await pool.connect(account).addMargin(bAmount, [])
         }
     }
 
@@ -304,7 +325,9 @@ describe('DeriV2', function () {
             cur = await getStates()
             await showDiff(pre, cur, `${account.name}.removeMargin(${ethers.utils.formatEther(bAmount)})`, tx)
         } else {
-            tx = await pool.connect(account).removeMargin(bAmount, [])
+            tx = await (pool.connect(account).functions['removeMargin(uint256,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
+                    bAmount, []))
+            // tx = await pool.connect(account).removeMargin(bAmount, [])
         }
     }
 
@@ -316,7 +339,9 @@ describe('DeriV2', function () {
             cur = await getStates()
             await showDiff(pre, cur, `trade(${account.name}, ${symbolId}, ${ethers.utils.formatEther(volume)})`, tx)
         } else {
-            tx = await pool.connect(account).trade(symbolId, volume, [])
+            tx = await (pool.connect(account).functions['trade(uint256,int256,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
+                    symbolId, volume, []))
+            // tx = await pool.connect(account).trade(symbolId, volume, [])
         }
     }
 
@@ -328,6 +353,8 @@ describe('DeriV2', function () {
             cur = await getStates()
             await showDiff(pre, cur, `${account.name}.liquidate(${trader.name})`, tx)
         } else {
+            tx = await (pool.connect(account).functions['liquidate(address,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
+                    trader.address, []))
             tx = await pool.connect(account).liquidate(trader.address, [])
         }
     }
