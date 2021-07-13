@@ -6,6 +6,7 @@ import '../interface/ILTokenOption.sol';
 import '../interface/IPTokenOption.sol';
 import '../interface/IERC20.sol';
 import '../interface/IOracleViewer.sol';
+import '../interface/IOracleWithUpdate.sol';
 import '../interface/IVolatilityOracle.sol';
 import '../interface/ILiquidatorQualifier.sol';
 import '../library/SafeMath.sol';

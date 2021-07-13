@@ -123,16 +123,16 @@ interface IEverlastingOption is IMigratable {
 
     function liquidate(address account) external;
 
-    function addLiquidity(uint256 bAmount, OraclePrice[] memory prices) external;
+    function addLiquidity(uint256 bAmount, SignedPrice[] memory prices) external;
 
-    function removeLiquidity(uint256 lShares, OraclePrice[] memory prices) external;
+    function removeLiquidity(uint256 lShares, SignedPrice[] memory prices) external;
 
-    function addMargin(uint256 bAmount, OraclePrice[] memory prices) external;
+    function addMargin(uint256 bAmount, SignedPrice[] memory prices) external;
 
-    function removeMargin(uint256 bAmount, OraclePrice[] memory prices) external;
+    function removeMargin(uint256 bAmount, SignedPrice[] memory prices) external;
 
-    function trade(uint256 symbolId, int256 tradeVolume, OraclePrice[] memory prices) external;
+    function trade(uint256 symbolId, int256 tradeVolume, SignedPrice[] memory prices) external;
 
-    function liquidate(address account, OraclePrice[] memory prices) external;
+    function liquidate(address account, SignedPrice[] memory prices) external;
 
 }
