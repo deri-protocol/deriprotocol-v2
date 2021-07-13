@@ -58,7 +58,7 @@ library ParaMath {
         uint256 ideltaB,
         bool deltaBSig,
         uint256 k
-    ) internal view returns (uint256) {
+    ) internal pure returns (uint256) {
         // calculate -b value and sig
         // -b = (1-k)Q1-kQ0^2/Q1+i*deltaB
         uint256 kQ02Q1 = DecimalMath.mul(k, Q0) * Q0 / Q1; // kQ0^2/Q1

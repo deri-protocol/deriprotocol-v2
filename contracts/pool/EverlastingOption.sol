@@ -6,15 +6,14 @@ import '../interface/ILTokenOption.sol';
 import '../interface/IPTokenOption.sol';
 import '../interface/IERC20.sol';
 import '../interface/IOracleViewer.sol';
+import '../interface/IOracleWithUpdate.sol';
 import '../interface/IVolatilityOracle.sol';
 import '../interface/ILiquidatorQualifier.sol';
 import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
 import '../utils/Migratable.sol';
-
-import {Pricing} from '../pricing/Pricing.sol';
+import {PMMPricing} from '../library/PMMPricing.sol';
 import {EverlastingOptionPricing} from '../library/EverlastingOptionPricing.sol';
-
 
 contract EverlastingOption is IEverlastingOption, Migratable {
 
@@ -22,7 +21,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     using SafeMath for int256;
     using SafeERC20 for IERC20;
 
-    Pricing public PRICING;
+    PMMPricing public PRICING;
     EverlastingOptionPricing public OPTIONPRICING;
     int256  constant ONE = 10**18;
     uint256 public _T = 10**18 / uint256(365); // premium funding period = 1 day
@@ -63,7 +62,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         address everlastingPricingOptionAddress,
         uint256[7] memory parameters,
         address[5] memory addresses) {
-        PRICING = Pricing(pricingAddress);
+        PRICING = PMMPricing(pricingAddress);
         OPTIONPRICING = EverlastingOptionPricing(everlastingPricingOptionAddress);
         _controller = msg.sender;
         _minPoolMarginRatio = int256(parameters[0]);
@@ -80,13 +79,12 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _liquidatorQualifierAddress = addresses[3];
         _protocolFeeCollector = addresses[4];
 
-        // only supports bToken of decimals 18
         _decimals = IERC20(addresses[0]).decimals();
     }
 
     // during a migration, this function is intended to be called in the source pool
     function approveMigration() external override _controller_ {
-        require(_migrationTimestamp != 0 && block.timestamp >= _migrationTimestamp, 'PerpetualPool: migrationTimestamp not met yet');
+        require(_migrationTimestamp != 0 && block.timestamp >= _migrationTimestamp, 'EO: migrationTimestamp not met yet');
         // approve new pool to pull all base tokens from this pool
         IERC20(_bTokenAddress).safeApprove(_migrationDestination, type(uint256).max);
         // set lToken/pToken to new pool, after redirecting pToken/lToken to new pool, this pool will stop functioning
@@ -98,8 +96,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     function executeMigration(address source) external override _controller_ {
         uint256 migrationTimestamp_ = IEverlastingOption(source).migrationTimestamp();
         address migrationDestination_ = IEverlastingOption(source).migrationDestination();
-        require(migrationTimestamp_ != 0 && block.timestamp >= migrationTimestamp_, 'PerpetualPool: migrationTimestamp not met yet');
-        require(migrationDestination_ == address(this), 'PerpetualPool: not destination pool');
+        require(migrationTimestamp_ != 0 && block.timestamp >= migrationTimestamp_, 'EO: migrationTimestamp not met yet');
+        require(migrationDestination_ == address(this), 'EO: not destination pool');
 
         // transfer bToken to this address
         IERC20(_bTokenAddress).safeTransferFrom(source, address(this), IERC20(_bTokenAddress).balanceOf(source));
@@ -236,28 +234,28 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     //================================================================================
 
     function addLiquidity(uint256 bAmount) external override {
-        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
+        require(bAmount > 0, 'EO: 0 bAmount');
         _addLiquidity(msg.sender, bAmount);
     }
 
     function removeLiquidity(uint256 lShares) external override {
-        require(lShares > 0, 'PerpetualPool: 0 lShares');
+        require(lShares > 0, 'EO: 0 lShares');
         _removeLiquidity(msg.sender, lShares);
     }
 
     function addMargin(uint256 bAmount) external override {
-        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
+        require(bAmount > 0, 'EO: 0 bAmount');
         _addMargin(msg.sender, bAmount);
     }
 
     function removeMargin(uint256 bAmount) external override {
-        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
+        require(bAmount > 0, 'EO: 0 bAmount');
         _removeMargin(msg.sender, bAmount);
     }
 
     function trade(uint256 symbolId, int256 tradeVolume) external override {
-        require(IPTokenOption(_pTokenAddress).isActiveSymbolId(symbolId), 'PerpetualPool: invalid symbolId');
-        require(tradeVolume != 0 && tradeVolume / ONE * ONE == tradeVolume, 'PerpetualPool: invalid tradeVolume');
+        require(IPTokenOption(_pTokenAddress).isActiveSymbolId(symbolId), 'EO: invalid symbolId');
+        require(tradeVolume != 0 && tradeVolume / ONE * ONE == tradeVolume, 'EO: invalid tradeVolume');
         _trade(msg.sender, symbolId, tradeVolume);
     }
 
@@ -265,47 +263,53 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         address liquidator = msg.sender;
         require(
             _liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(_liquidatorQualifierAddress).isQualifiedLiquidator(liquidator),
-            'PerpetualPool: not qualified liquidator'
+            'EO: not qualified liquidator'
         );
         _liquidate(liquidator, account);
     }
 
     //================================================================================
-    // Interactions
+    // Interactions with offchain oracles
     //================================================================================
 
-    function addLiquidity(uint256 bAmount, OraclePrice[] memory prices) external override {
-        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
+    function addLiquidity(uint256 bAmount, SignedPrice[] memory prices) external override {
+        require(bAmount > 0, 'EO: 0 bAmount');
+        _updateSymbolOracles(prices);
         _addLiquidity(msg.sender, bAmount);
     }
 
-    function removeLiquidity(uint256 lShares, OraclePrice[] memory prices) external override {
-        require(lShares > 0, 'PerpetualPool: 0 lShares');
+    function removeLiquidity(uint256 lShares, SignedPrice[] memory prices) external override {
+        require(lShares > 0, 'EO: 0 lShares');
+        _updateSymbolOracles(prices);
         _removeLiquidity(msg.sender, lShares);
     }
 
-    function addMargin(uint256 bAmount, OraclePrice[] memory prices) external override {
-        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
+    function addMargin(uint256 bAmount, SignedPrice[] memory prices) external override {
+        require(bAmount > 0, 'EO: 0 bAmount');
+        _updateSymbolOracles(prices);
         _addMargin(msg.sender, bAmount);
     }
 
-    function removeMargin(uint256 bAmount, OraclePrice[] memory prices) external override {
-        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
+    function removeMargin(uint256 bAmount, SignedPrice[] memory prices) external override {
+        require(bAmount > 0, 'EO: 0 bAmount');
+        _updateSymbolOracles(prices);
         _removeMargin(msg.sender, bAmount);
     }
 
-    function trade(uint256 symbolId, int256 tradeVolume, OraclePrice[] memory prices) external override {
-        require(IPTokenOption(_pTokenAddress).isActiveSymbolId(symbolId), 'PerpetualPool: invalid symbolId');
-        require(tradeVolume != 0 && tradeVolume / ONE * ONE == tradeVolume, 'PerpetualPool: invalid tradeVolume');
+    function trade(uint256 symbolId, int256 tradeVolume, SignedPrice[] memory prices) external override {
+        require(IPTokenOption(_pTokenAddress).isActiveSymbolId(symbolId), 'EO: invalid symbolId');
+        require(tradeVolume != 0 && tradeVolume / ONE * ONE == tradeVolume, 'EO: invalid tradeVolume');
+        _updateSymbolOracles(prices);
         _trade(msg.sender, symbolId, tradeVolume);
     }
 
-    function liquidate(address account, OraclePrice[] memory prices) external override {
+    function liquidate(address account, SignedPrice[] memory prices) external override {
         address liquidator = msg.sender;
         require(
             _liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(_liquidatorQualifierAddress).isQualifiedLiquidator(liquidator),
-            'PerpetualPool: not qualified liquidator'
+            'EO: not qualified liquidator'
         );
+        _updateSymbolOracles(prices);
         _liquidate(liquidator, account);
     }
 
@@ -344,7 +348,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _liquidity -= bAmount.utoi();
         require(
             totalAbsCost == 0 || (totalDynamicEquity - bAmount.utoi()) * ONE / totalAbsCost >= _minPoolMarginRatio,
-            'PerpetualPool: pool insufficient margin'
+            'EO: pool insufficient margin'
         );
         lToken.burn(account, lShares);
         _transferOut(account, bAmount);
@@ -378,7 +382,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             margin -= amount;
         }
 
-        require(_getTraderMarginRatio(symbolIds, positions, margin) >= _minInitialMarginRatio, 'PerpetualPool: insufficient margin');
+        require(_getTraderMarginRatio(symbolIds, positions, margin) >= _minInitialMarginRatio, 'EO: insufficient margin');
         _updateTraderPortfolio(account, symbolIds, positions, positionUpdates, margin);
         _transferOut(account, bAmount);
 
@@ -416,8 +420,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         TradeParams memory params;
 
         int256 tvCost = _queryTradePMM(symbolId, tradeVolume * _symbols[symbolId].multiplier / ONE);
+        _symbols[symbolId].quote_balance_premium += tvCost;
 
-        _updateQuoteBalance(symbolId, tvCost);
         params.tradersNetVolume = _symbols[symbolId].tradersNetVolume;
         params.intrinsicValue = _symbols[symbolId].intrinsicValue;
         params.timeValue = _symbols[symbolId].timeValue;
@@ -437,10 +441,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             }
         }
 
-        // adjust totalAbsCost after trading
-//        totalAbsCost -= (positions[index].volume * (params.intrinsicValue + params.timeValue) / ONE * params.multiplier / ONE).abs();
-//        totalAbsCost += ((positions[index].volume + tradeVolume) * (params.intrinsicValue + params.timeValue) / ONE * params.multiplier / ONE).abs();
-
         totalAbsCost += ((params.tradersNetVolume + tradeVolume).abs() - params.tradersNetVolume.abs()) *
                         (params.intrinsicValue + params.timeValue) / ONE * params.multiplier / ONE;
 
@@ -457,9 +457,9 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         params.protocolFee = params.fee * _protocolFeeCollectRatio / ONE;
         _protocolFeeAccrued += params.protocolFee;
         _liquidity += params.fee - params.protocolFee + params.realizedCost;
-        require(totalAbsCost == 0 || totalDynamicEquity * ONE / totalAbsCost >= _minPoolMarginRatio, 'PerpetualPool: insufficient liquidity');
+        require(totalAbsCost == 0 || totalDynamicEquity * ONE / totalAbsCost >= _minPoolMarginRatio, 'EO: insufficient liquidity');
         _updateTraderPortfolio(account, symbolIds, positions, positionUpdates, margin);
-        require(_getTraderMarginRatio(symbolIds, positions, margin) >= _minInitialMarginRatio, 'PerpetualPool: insufficient margin');
+        require(_getTraderMarginRatio(symbolIds, positions, margin) >= _minInitialMarginRatio, 'EO: insufficient margin');
         emit Trade(account, symbolId, tradeVolume, params.intrinsicValue.itou(), params.timeValue.itou());
     }
 
@@ -467,7 +467,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _updateSymbolPricesAndFundingRates();
 
         (uint256[] memory symbolIds, IPTokenOption.Position[] memory positions, , int256 margin) = _settleTraderFundingFee(account);
-        require(_getTraderMarginRatio(symbolIds, positions, margin) < _minMaintenanceMarginRatio, 'PerpetualPool: cannot liquidate');
+        require(_getTraderMarginRatio(symbolIds, positions, margin) < _minMaintenanceMarginRatio, 'EO: cannot liquidate');
 
         int256 netEquity = margin;
         for (uint256 i = 0; i < symbolIds.length; i++) {
@@ -501,6 +501,19 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     //================================================================================
     // Helpers
     //================================================================================
+    function _updateSymbolOracles(SignedPrice[] memory prices) internal {
+        for (uint256 i = 0; i < prices.length; i++) {
+            uint256 symbolId = prices[i].symbolId;
+            IOracleWithUpdate(_symbols[symbolId].oracleAddress).updatePrice(
+                prices[i].timestamp,
+                prices[i].price,
+                prices[i].v,
+                prices[i].r,
+                prices[i].s
+            );
+        }
+    }
+
     function _getIntrinsicValuePrice(uint256 symbolId) public view returns (int256 price) {
         SymbolInfo storage s = _symbols[symbolId];
         int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
@@ -569,12 +582,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         tvCost = PRICING.queryTradePMM(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), volume, (_liquidity + s.quote_balance_premium).itou(),  s.K);
     }
 
-    function _updateQuoteBalance(uint256 symbolId, int256 addBalance) internal {
-        SymbolInfo storage s = _symbols[symbolId];
-        s.quote_balance_premium += addBalance;
-    }
-
-//    function _getTotalDynamicEquity() public view returns (int256 totalDynamicEquity, int256 totalAbsCost) {
+    //    function _getTotalDynamicEquity() public view returns (int256 totalDynamicEquity, int256 totalAbsCost) {
 //        uint256[] memory symbolIds = IPTokenOption(_pTokenAddress).getActiveSymbolIds();
 //        totalDynamicEquity = _liquidity;
 //        for (uint256 i = 0; i < symbolIds.length; i++) {
@@ -708,8 +716,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
                 totalAbsCost += cost.abs();
             }
         }
-        int256 marginRatio = totalAbsCost == 0 ? type(int256).max : totalDynamicEquity * ONE / totalAbsCost;
-        return marginRatio;
+        return totalAbsCost == 0 ? type(int256).max : totalDynamicEquity * ONE / totalAbsCost;
     }
 
     function _deflationCompatibleSafeTransferFrom(address from, address to, uint256 bAmount) internal returns (uint256) {
