@@ -41,6 +41,11 @@ abstract contract BTokenSwapper is IBTokenSwapper {
 
         uint256 bx1 = tokenBX.balanceOf(caller);
         amountB0 = amountB0.rescale(18, decimalsB0);
+
+        if (amountB0 == 0) {
+            return (0, 0);
+        }
+
         tokenB0.safeTransferFrom(caller, address(this), amountB0);
         _swapExactTokensForTokens(addressB0, addressBX, caller);
         uint256 bx2 = tokenBX.balanceOf(caller);
@@ -63,6 +68,11 @@ abstract contract BTokenSwapper is IBTokenSwapper {
 
         uint256 b01 = tokenB0.balanceOf(caller);
         amountBX = amountBX.rescale(18, decimalsBX);
+
+        if (amountBX == 0) {
+            return (0, 0);
+        }
+
         tokenBX.safeTransferFrom(caller, address(this), amountBX);
         _swapExactTokensForTokens(addressBX, addressB0, caller);
         uint256 b02 = tokenB0.balanceOf(caller);
@@ -90,6 +100,11 @@ abstract contract BTokenSwapper is IBTokenSwapper {
 
         amountB0 = amountB0.rescale(18, decimalsB0);
         amountBX = amountBX.rescale(18, decimalsBX);
+
+        if (amountB0 == 0 || amountBX == 0) {
+            return (0, 0);
+        }
+
         tokenB0.safeTransferFrom(caller, address(this), amountB0);
         if (amountB0 >= _getAmountInB0(amountBX) * 11 / 10) {
             _swapTokensForExactTokens(addressB0, addressBX, amountBX, caller);
@@ -126,6 +141,11 @@ abstract contract BTokenSwapper is IBTokenSwapper {
 
         amountB0 = amountB0.rescale(18, decimalsB0);
         amountBX = amountBX.rescale(18, decimalsBX);
+
+        if (amountB0 == 0 || amountBX == 0) {
+            return (0, 0);
+        }
+
         tokenBX.safeTransferFrom(caller, address(this), amountBX);
         if (amountBX >= _getAmountInBX(amountB0) * 11 / 10) {
             _swapTokensForExactTokens(addressBX, addressB0, amountB0, caller);
