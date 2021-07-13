@@ -269,7 +269,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     }
 
     //================================================================================
-    // Interactions
+    // Interactions with offchain oracles
     //================================================================================
 
     function addLiquidity(uint256 bAmount, SignedPrice[] memory prices) external override {
