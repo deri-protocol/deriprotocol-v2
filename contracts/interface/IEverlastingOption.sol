@@ -111,28 +111,19 @@ interface IEverlastingOption is IMigratable {
         uint256 k
     ) external;
 
-    function addLiquidity(uint256 bAmount) external;
+    function addLiquidity(uint256 bAmount, SignedPrice[] memory volatility) external;
 
-    function removeLiquidity(uint256 lShares) external;
+    function removeLiquidity(uint256 lShares, SignedPrice[] memory volatility) external;
 
     function addMargin(uint256 bAmount) external;
 
-    function removeMargin(uint256 bAmount) external;
+    function removeMargin(uint256 bAmount, SignedPrice[] memory volatility) external;
 
-    function trade(uint256 symbolId, int256 tradeVolume) external;
+    function trade(uint256 symbolId, int256 tradeVolume, SignedPrice[] memory volatility) external;
 
-    function liquidate(address account) external;
+    function liquidate(address account, SignedPrice[] memory volatility) external;
 
-    function addLiquidity(uint256 bAmount, SignedPrice[] memory prices) external;
 
-    function removeLiquidity(uint256 lShares, SignedPrice[] memory prices) external;
 
-    function addMargin(uint256 bAmount, SignedPrice[] memory prices) external;
-
-    function removeMargin(uint256 bAmount, SignedPrice[] memory prices) external;
-
-    function trade(uint256 symbolId, int256 tradeVolume, SignedPrice[] memory prices) external;
-
-    function liquidate(address account, SignedPrice[] memory prices) external;
 
 }

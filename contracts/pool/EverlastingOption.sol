@@ -229,17 +229,20 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _T = T;
     }
 
+
     //================================================================================
-    // Interactions with onchain oracles
+    // Interactions with offchain volatility
     //================================================================================
 
-    function addLiquidity(uint256 bAmount) external override {
+    function addLiquidity(uint256 bAmount, SignedPrice[] memory volatility) external override {
         require(bAmount > 0, 'EO: 0 bAmount');
+        _updateSymbolVolatility(volatility);
         _addLiquidity(msg.sender, bAmount);
     }
 
-    function removeLiquidity(uint256 lShares) external override {
+    function removeLiquidity(uint256 lShares, SignedPrice[] memory volatility) external override {
         require(lShares > 0, 'EO: 0 lShares');
+        _updateSymbolVolatility(volatility);
         _removeLiquidity(msg.sender, lShares);
     }
 
@@ -248,68 +251,26 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _addMargin(msg.sender, bAmount);
     }
 
-    function removeMargin(uint256 bAmount) external override {
+    function removeMargin(uint256 bAmount, SignedPrice[] memory volatility) external override {
         require(bAmount > 0, 'EO: 0 bAmount');
+        _updateSymbolVolatility(volatility);
         _removeMargin(msg.sender, bAmount);
     }
 
-    function trade(uint256 symbolId, int256 tradeVolume) external override {
+    function trade(uint256 symbolId, int256 tradeVolume, SignedPrice[] memory volatility) external override {
         require(IPTokenOption(_pTokenAddress).isActiveSymbolId(symbolId), 'EO: invalid symbolId');
         require(tradeVolume != 0 && tradeVolume / ONE * ONE == tradeVolume, 'EO: invalid tradeVolume');
+        _updateSymbolVolatility(volatility);
         _trade(msg.sender, symbolId, tradeVolume);
     }
 
-    function liquidate(address account) external override {
+    function liquidate(address account, SignedPrice[] memory volatility) external override {
         address liquidator = msg.sender;
         require(
             _liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(_liquidatorQualifierAddress).isQualifiedLiquidator(liquidator),
             'EO: not qualified liquidator'
         );
-        _liquidate(liquidator, account);
-    }
-
-    //================================================================================
-    // Interactions with offchain oracles
-    //================================================================================
-
-    function addLiquidity(uint256 bAmount, SignedPrice[] memory prices) external override {
-        require(bAmount > 0, 'EO: 0 bAmount');
-        _updateSymbolOracles(prices);
-        _addLiquidity(msg.sender, bAmount);
-    }
-
-    function removeLiquidity(uint256 lShares, SignedPrice[] memory prices) external override {
-        require(lShares > 0, 'EO: 0 lShares');
-        _updateSymbolOracles(prices);
-        _removeLiquidity(msg.sender, lShares);
-    }
-
-    function addMargin(uint256 bAmount, SignedPrice[] memory prices) external override {
-        require(bAmount > 0, 'EO: 0 bAmount');
-        _updateSymbolOracles(prices);
-        _addMargin(msg.sender, bAmount);
-    }
-
-    function removeMargin(uint256 bAmount, SignedPrice[] memory prices) external override {
-        require(bAmount > 0, 'EO: 0 bAmount');
-        _updateSymbolOracles(prices);
-        _removeMargin(msg.sender, bAmount);
-    }
-
-    function trade(uint256 symbolId, int256 tradeVolume, SignedPrice[] memory prices) external override {
-        require(IPTokenOption(_pTokenAddress).isActiveSymbolId(symbolId), 'EO: invalid symbolId');
-        require(tradeVolume != 0 && tradeVolume / ONE * ONE == tradeVolume, 'EO: invalid tradeVolume');
-        _updateSymbolOracles(prices);
-        _trade(msg.sender, symbolId, tradeVolume);
-    }
-
-    function liquidate(address account, SignedPrice[] memory prices) external override {
-        address liquidator = msg.sender;
-        require(
-            _liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(_liquidatorQualifierAddress).isQualifiedLiquidator(liquidator),
-            'EO: not qualified liquidator'
-        );
-        _updateSymbolOracles(prices);
+        _updateSymbolVolatility(volatility);
         _liquidate(liquidator, account);
     }
 
@@ -317,7 +278,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     //================================================================================
     // Core logics
     //================================================================================
-
     function _addLiquidity(address account, uint256 bAmount) internal _lock_ {
         (int256 totalDynamicEquity, ) = _updateSymbolPricesAndFundingRates();
 
@@ -501,18 +461,21 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     //================================================================================
     // Helpers
     //================================================================================
-    function _updateSymbolOracles(SignedPrice[] memory prices) internal {
-        for (uint256 i = 0; i < prices.length; i++) {
-            uint256 symbolId = prices[i].symbolId;
-            IOracleWithUpdate(_symbols[symbolId].oracleAddress).updatePrice(
-                prices[i].timestamp,
-                prices[i].price,
-                prices[i].v,
-                prices[i].r,
-                prices[i].s
+    function _updateSymbolVolatility(SignedPrice[] memory volatility) internal {
+        for (uint256 i = 0; i < volatility.length; i++) {
+            uint256 symbolId = volatility[i].symbolId;
+            IVolatilityOracle(_symbols[symbolId].volatilityAddress).updateVolitility(
+                volatility[i].timestamp,
+                volatility[i].price,
+                volatility[i].v,
+                volatility[i].r,
+                volatility[i].s
             );
         }
     }
+
+
+
 
     function _getIntrinsicValuePrice(uint256 symbolId) public view returns (int256 price) {
         SymbolInfo storage s = _symbols[symbolId];
