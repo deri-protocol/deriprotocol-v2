@@ -349,6 +349,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
         require(_getTraderMarginRatio(symbolIds, positions, margin) >= _minInitialMarginRatio, 'EO: insufficient margin');
         _updateTraderPortfolio(account, symbolIds, positions, positionUpdates, margin);
+
         _transferOut(account, bAmount);
 
         emit RemoveMargin(account, bAmount);
@@ -423,8 +424,10 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _protocolFeeAccrued += params.protocolFee;
         _liquidity += params.fee - params.protocolFee + params.realizedCost;
         require(totalAbsCost == 0 || totalDynamicEquity * ONE / totalAbsCost >= _minPoolMarginRatio, 'EO: insufficient liquidity');
-        _updateTraderPortfolio(account, symbolIds, positions, positionUpdates, margin);
+
         require(_getTraderMarginRatio(symbolIds, positions, margin) >= _minInitialMarginRatio, 'EO: insufficient margin');
+        _updateTraderPortfolio(account, symbolIds, positions, positionUpdates, margin);
+
         emit Trade(account, symbolId, tradeVolume, params.intrinsicValue.itou(), params.timeValue.itou());
     }
 
@@ -481,8 +484,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     }
 
 
-
-
     function _getIntrinsicValuePrice(uint256 symbolId) public view returns (int256 price) {
         SymbolInfo storage s = _symbols[symbolId];
         int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
@@ -497,8 +498,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 optionPrice = s.isCall
             ? OPTIONPRICING.getEverlastingCallPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), volatility, _T, 10**16)
             : OPTIONPRICING.getEverlastingPutPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), volatility, _T, 10**16);
-        int256 price = optionPrice - intrinsicPrice;
-        return price;
+        return optionPrice - intrinsicPrice;
     }
 
 
@@ -525,13 +525,11 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         uint256[] memory symbolIds = IPTokenOption(_pTokenAddress).getActiveSymbolIds();
 
         totalDynamicEquity = _liquidity;
-        int256[] memory lastTvMidPirce = new int256[](symbolIds.length);
         for (uint256 i = 0; i < symbolIds.length; i++) {
             SymbolInfo storage s = _symbols[symbolIds[i]];
             int256 intrinsicPrice = _getIntrinsicValuePrice(symbolIds[i]);
             int256 timePrice = _getTvMidPrice(symbolIds[i]);
             s.intrinsicValue = intrinsicPrice;
-            lastTvMidPirce[i] = s.timeValue;
             s.timeValue = timePrice;
 
             if (s.tradersNetVolume != 0) {
@@ -549,7 +547,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
                     int256 delta1 = ratePerSec1 * int256(curTimestamp - preTimestamp);
                     unchecked { s.cumulativeDiseqFundingRate += delta1; }
 
-                    int256 ratePerSec2 = lastTvMidPirce[i] * s.multiplier / ONE  * _premiumFundingCoefficient / ONE;
+                    int256 ratePerSec2 = s.timeValue * s.multiplier / ONE  * _premiumFundingCoefficient / ONE;
                     int256 delta2 = ratePerSec2 * int256(curTimestamp - preTimestamp);
                     unchecked { s.cumulativePremiumFundingRate += delta2; }
                 }
