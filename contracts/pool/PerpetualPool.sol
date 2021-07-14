@@ -137,6 +137,10 @@ contract PerpetualPool is IPerpetualPool {
         return _symbols[symbolId].oracleAddress;
     }
 
+    function getLastUpdateBlock() external override view returns (uint256) {
+        return _lastUpdateBlock;
+    }
+
     function getProtocolFeeAccrued() external override view returns (int256) {
         return _protocolFeeAccrued;
     }
