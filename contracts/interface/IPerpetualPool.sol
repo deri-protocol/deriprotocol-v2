@@ -71,6 +71,8 @@ interface IPerpetualPool {
 
     function getSymbolOracle(uint256 symbolId) external view returns (address);
 
+    function getLastUpdateBlock() external view returns (uint256);
+
     function getProtocolFeeAccrued() external view returns (int256);
 
     function collectProtocolFee() external;
