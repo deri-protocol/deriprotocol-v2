@@ -56,7 +56,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _;
         _mutex = false;
     }
-    
+
 
     constructor (address pricingAddress,
         address everlastingPricingOptionAddress,
@@ -110,6 +110,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
         // transfer state values
         _liquidity = IEverlastingOption(source).getLiquidity();
+        _lastTimestamp = IEverlastingOption(source).getLastTimestamp();
         _protocolFeeAccrued = IEverlastingOption(source).getProtocolFeeAccrued();
 
         emit ExecuteMigration(migrationTimestamp_, source, migrationDestination_);
@@ -158,6 +159,10 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
     function getLiquidity() external override view returns (int256) {
         return _liquidity;
+    }
+
+    function getLastTimestamp() external override view returns (uint256) {
+        return _lastTimestamp;
     }
 
     function getProtocolFeeAccrued() external override view returns (int256) {
