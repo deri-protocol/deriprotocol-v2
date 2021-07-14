@@ -81,8 +81,6 @@ interface IEverlastingOption is IMigratable {
 
     function getLiquidity() external view returns (int256);
 
-    function getLastTimestamp() external view returns (uint256);
-
     function getProtocolFeeAccrued() external view returns (int256);
 
     function collectProtocolFee() external;

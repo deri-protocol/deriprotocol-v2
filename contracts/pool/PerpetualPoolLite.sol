@@ -100,7 +100,6 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
 
         // transfer state values
         _liquidity = IPerpetualPoolLite(source).getLiquidity();
-        _lastUpdateBlock = IPerpetualPoolLite(source).getLastUpdateBlock();
         _protocolFeeAccrued = IPerpetualPoolLite(source).getProtocolFeeAccrued();
 
         emit ExecuteMigration(migrationTimestamp_, source, migrationDestination_);
@@ -148,10 +147,6 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
 
     function getLiquidity() external override view returns (int256) {
         return _liquidity;
-    }
-
-    function getLastUpdateBlock() external override view returns (uint256) {
-        return _lastUpdateBlock;
     }
 
     function getProtocolFeeAccrued() external override view returns (int256) {

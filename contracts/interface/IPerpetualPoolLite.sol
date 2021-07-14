@@ -64,8 +64,6 @@ interface IPerpetualPoolLite is IMigratable {
 
     function getLiquidity() external view returns (int256);
 
-    function getLastUpdateBlock() external view returns (uint256);
-
     function getProtocolFeeAccrued() external view returns (int256);
 
     function collectProtocolFee() external;
