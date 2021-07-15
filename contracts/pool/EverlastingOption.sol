@@ -56,7 +56,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _;
         _mutex = false;
     }
-    
+
 
     constructor (address pricingAddress,
         address everlastingPricingOptionAddress,
@@ -473,7 +473,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     function _updateSymbolVolatility(SignedPrice[] memory volatility) internal {
         for (uint256 i = 0; i < volatility.length; i++) {
             uint256 symbolId = volatility[i].symbolId;
-            IVolatilityOracle(_symbols[symbolId].volatilityAddress).updateVolitility(
+            IVolatilityOracle(_symbols[symbolId].volatilityAddress).updateVolatility(
                 volatility[i].timestamp,
                 volatility[i].price,
                 volatility[i].v,
@@ -494,7 +494,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 intrinsicPrice = _getIntrinsicValuePrice(symbolId);
         SymbolInfo storage s = _symbols[symbolId];
         uint256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice();
-        uint256 volatility = IVolatilityOracle(s.volatilityAddress).getVolitility();
+        uint256 volatility = IVolatilityOracle(s.volatilityAddress).getVolatility();
         int256 optionPrice = s.isCall
             ? OPTIONPRICING.getEverlastingCallPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), volatility, _T, 10**16)
             : OPTIONPRICING.getEverlastingPutPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), volatility, _T, 10**16);
