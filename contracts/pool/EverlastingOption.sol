@@ -386,7 +386,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         TradeParams memory params;
 
         int256 tvCost = _queryTradePMM(symbolId, tradeVolume * _symbols[symbolId].multiplier / ONE);
-        _symbols[symbolId].quote_balance_premium += tvCost;
+        _symbols[symbolId].quote_balance_offset += tvCost;
 
         params.tradersNetVolume = _symbols[symbolId].tradersNetVolume;
         params.intrinsicValue = _symbols[symbolId].intrinsicValue;
@@ -441,7 +441,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         for (uint256 i = 0; i < symbolIds.length; i++) {
             if (positions[i].volume != 0) {
                 int256 tvCost = _queryTradePMM(symbolIds[i], -positions[i].volume * _symbols[symbolIds[i]].multiplier / ONE);
-                _symbols[symbolIds[i]].quote_balance_premium += tvCost;
+                _symbols[symbolIds[i]].quote_balance_offset += tvCost;
                 _symbols[symbolIds[i]].tradersNetVolume -= positions[i].volume;
                 _symbols[symbolIds[i]].tradersNetCost -= positions[i].cost;
                 int256 curCost = -positions[i].volume * _symbols[symbolIds[i]].intrinsicValue / ONE * _symbols[symbolIds[i]].multiplier / ONE + tvCost;
@@ -506,7 +506,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 timePrice = _getTimeValuePrice(symbolId);
         if (_liquidity <= 0) return timePrice;
         SymbolInfo storage s = _symbols[symbolId];
-        uint256 midPrice = PRICING.getTvMidPrice(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), (_liquidity + s.quote_balance_premium).itou(), s.K);
+        uint256 midPrice = PRICING.getTvMidPrice(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), (_liquidity + s.quote_balance_offset).itou(), s.K);
         return midPrice.utoi();
     }
 
@@ -515,7 +515,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         require(volume != 0, "invalid tradeVolume");
         int256 timePrice = _getTimeValuePrice(symbolId);
         SymbolInfo storage s = _symbols[symbolId];
-        tvCost = PRICING.queryTradePMM(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), volume, (_liquidity + s.quote_balance_premium).itou(),  s.K);
+        tvCost = PRICING.queryTradePMM(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), volume, (_liquidity + s.quote_balance_offset).itou(),  s.K);
     }
 
 
@@ -543,7 +543,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             for (uint256 i = 0; i < symbolIds.length; i++) {
                 SymbolInfo storage s = _symbols[symbolIds[i]];
                 if (s.tradersNetVolume != 0) {
-                    int256 ratePerSec1 = s.tradersNetVolume * s.intrinsicValue / ONE * s.intrinsicValue / ONE * s.multiplier / ONE * s.multiplier / ONE * s.diseqFundingCoefficient / totalDynamicEquity;
+                    int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
+                    int256 ratePerSec1 = s.tradersNetVolume * oraclePrice / ONE * oraclePrice / ONE * s.multiplier / ONE * s.multiplier / ONE * s.diseqFundingCoefficient / totalDynamicEquity;
                     int256 delta1 = ratePerSec1 * int256(curTimestamp - preTimestamp);
                     unchecked { s.cumulativeDiseqFundingRate += delta1; }
 

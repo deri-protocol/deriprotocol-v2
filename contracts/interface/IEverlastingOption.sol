@@ -22,7 +22,7 @@ interface IEverlastingOption is IMigratable {
         int256  timeValue;
         int256  tradersNetVolume;
         int256  tradersNetCost;
-        int256  quote_balance_premium;
+        int256  quote_balance_offset;
         uint256 K;
     }
 
