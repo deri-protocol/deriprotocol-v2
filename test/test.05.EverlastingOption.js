@@ -93,13 +93,23 @@ describe('DeriV2', function () {
 
         oracleBTCUSD = await ethers.getContractAt("SymbolOracleWoo", "0x78Db6d02EE87260a5D825B31616B5C29f927E430")
         oracleETHUSD = await ethers.getContractAt("SymbolOracleWoo", "0xdF0050D6A07C19C6F6505d3e66B68c29F41edA09")
+        volatilityOracle = await ethers.getContractAt("VolatilityOracleOffChain", "0xB45a33E32379eB2D7cc40ce5201ab3320C633f25")
+
+        //
+        // volatilityOracle = await (await ethers.getContractFactory("VolatilityOracleOffChainMock")).deploy(
+        //     "VOLA",
+        //     "0x4C059dD7b01AAECDaA3d2cAf4478f17b9c690080",
+        //     decimalStr("10"))
+        // await volatilityOracle.updateVolitility(1, decimalStr(1), 0, ethers.constants.HashZero, ethers.constants.HashZero)
+        //
+        // volatilityOracle = await (await ethers.getContractFactory("VolatilityOracleOffChain")).deploy(
+        //     "VOL-BTCUSD",
+        //     "0x4C059dD7b01AAECDaA3d2cAf4478f17b9c690080",
+        //     604800)
 
 
-        volatilityOracle = await (await ethers.getContractFactory("VolatilityOracleOffChainMock")).deploy(
-            "VOLA",
-            "0x4C059dD7b01AAECDaA3d2cAf4478f17b9c690080",
-            decimalStr("10"))
-        await volatilityOracle.updateVolitility(1, decimalStr(1), 0, ethers.constants.HashZero, ethers.constants.HashZero)
+
+
 
         await pool.addSymbol(
             0, 'BTCUSD-30000-C',
@@ -283,9 +293,9 @@ describe('DeriV2', function () {
             await showDiff(pre, cur, `${account.name}.addLiquidity(${ethers.utils.formatEther(bAmount)})`, tx)
         } else
             {
-                tx = await (pool.connect(account).functions['addLiquidity(uint256,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
-                    bAmount, []))
-            // tx = await pool.connect(account).addLiquidity(bAmount, [])
+                // tx = await (pool.connect(account).functions['addLiquidity(uint256,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
+                //     bAmount, []))
+            tx = await pool.connect(account).addLiquidity(bAmount, [])
         }
     }
 
@@ -297,8 +307,7 @@ describe('DeriV2', function () {
             cur = await getStates()
             await showDiff(pre, cur, `${account.name}.removeLiquidity(${ethers.utils.formatEther(bAmount)})`, tx)
         } else {
-            tx = await (pool.connect(account).functions['removeLiquidity(uint256,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
-                    bAmount, []))
+            tx = await (pool.connect(account).removeLiquidity(bAmount, []))
             // tx = await pool.connect(account).removeLiquidity(bAmount, [])
         }
     }
@@ -325,9 +334,9 @@ describe('DeriV2', function () {
             cur = await getStates()
             await showDiff(pre, cur, `${account.name}.removeMargin(${ethers.utils.formatEther(bAmount)})`, tx)
         } else {
-            tx = await (pool.connect(account).functions['removeMargin(uint256,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
-                    bAmount, []))
-            // tx = await pool.connect(account).removeMargin(bAmount, [])
+            // tx = await (pool.connect(account).functions['removeMargin(uint256,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
+            //         bAmount, []))
+            tx = await pool.connect(account).removeMargin(bAmount, [])
         }
     }
 
@@ -339,9 +348,9 @@ describe('DeriV2', function () {
             cur = await getStates()
             await showDiff(pre, cur, `trade(${account.name}, ${symbolId}, ${ethers.utils.formatEther(volume)})`, tx)
         } else {
-            tx = await (pool.connect(account).functions['trade(uint256,int256,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
-                    symbolId, volume, []))
-            // tx = await pool.connect(account).trade(symbolId, volume, [])
+            // tx = await (pool.connect(account).functions['trade(uint256,int256,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
+            //         symbolId, volume, []))
+            tx = await pool.connect(account).trade(symbolId, volume, [])
         }
     }
 
@@ -353,8 +362,8 @@ describe('DeriV2', function () {
             cur = await getStates()
             await showDiff(pre, cur, `${account.name}.liquidate(${trader.name})`, tx)
         } else {
-            tx = await (pool.connect(account).functions['liquidate(address,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
-                    trader.address, []))
+            // tx = await (pool.connect(account).functions['liquidate(address,(uint256,uint256,uint256,uint8,bytes32,bytes32)[])'](
+            //         trader.address, []))
             tx = await pool.connect(account).liquidate(trader.address, [])
         }
     }

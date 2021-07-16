@@ -15,6 +15,7 @@ import '../utils/Migratable.sol';
 import {PMMPricing} from '../library/PMMPricing.sol';
 import {EverlastingOptionPricing} from '../library/EverlastingOptionPricing.sol';
 
+
 contract EverlastingOption is IEverlastingOption, Migratable {
 
     using SafeMath for uint256;
@@ -23,14 +24,15 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
     PMMPricing public PRICING;
     EverlastingOptionPricing public OPTIONPRICING;
-    int256  constant ONE = 10**18;
+    int256 constant ONE = 10**18;
+    int256 constant MinInitialMarginRatio = 10**16;
     uint256 public _T = 10**18 / uint256(365); // premium funding period = 1 day
     int256 public _premiumFundingCoefficient = 10**18 / int256(3600*24); // premium funding rate per second
 
     uint256 immutable _decimals;
     int256  immutable _minPoolMarginRatio;
-    int256  immutable _minInitialMarginRatio;
-    int256  immutable _minMaintenanceMarginRatio;
+    int256  immutable _initialMarginRatio;
+    int256  immutable _maintenanceMarginRatio;
     int256  immutable _minLiquidationReward;
     int256  immutable _maxLiquidationReward;
     int256  immutable _liquidationCutRatio;
@@ -66,8 +68,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         OPTIONPRICING = EverlastingOptionPricing(everlastingPricingOptionAddress);
         _controller = msg.sender;
         _minPoolMarginRatio = int256(parameters[0]);
-        _minInitialMarginRatio = int256(parameters[1]);
-        _minMaintenanceMarginRatio = int256(parameters[2]);
+        _initialMarginRatio = int256(parameters[1]);
+        _maintenanceMarginRatio = int256(parameters[2]);
         _minLiquidationReward = int256(parameters[3]);
         _maxLiquidationReward = int256(parameters[4]);
         _liquidationCutRatio = int256(parameters[5]);
@@ -119,8 +121,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
     function getParameters() external override view returns (
         int256 minPoolMarginRatio,
-        int256 minInitialMarginRatio,
-        int256 minMaintenanceMarginRatio,
+        int256 initialMarginRatio,
+        int256 maintenanceMarginRatio,
         int256 minLiquidationReward,
         int256 maxLiquidationReward,
         int256 liquidationCutRatio,
@@ -128,8 +130,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     ) {
         return (
             _minPoolMarginRatio,
-            _minInitialMarginRatio,
-            _minMaintenanceMarginRatio,
+            _initialMarginRatio,
+            _maintenanceMarginRatio,
             _minLiquidationReward,
             _maxLiquidationReward,
             _liquidationCutRatio,
@@ -347,8 +349,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             margin -= amount;
         }
 
-        (int256 totalDynamicMargin, int256 totalMinInitialMargin, ) = _getTraderMarginRatio(symbolIds, positions, margin);
-        require( totalDynamicMargin >= totalMinInitialMargin, 'EO: insufficient margin');
+        (bool initialMarginSafe,) = _getTraderMarginStatus(symbolIds, positions, margin);
+        require(initialMarginSafe, 'EO: insufficient margin');
         _updateTraderPortfolio(account, symbolIds, positions, positionUpdates, margin);
 
         _transferOut(account, bAmount);
@@ -426,8 +428,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _liquidity += params.fee - params.protocolFee + params.realizedCost;
         require(totalAbsCost == 0 || totalDynamicEquity * ONE / totalAbsCost >= _minPoolMarginRatio, 'EO: insufficient liquidity');
 
-        (int256 totalDynamicMargin, int256 totalMinInitialMargin, ) = _getTraderMarginRatio(symbolIds, positions, margin);
-        require( totalDynamicMargin >= totalMinInitialMargin, 'EO: insufficient margin');
+        (bool initialMarginSafe,) = _getTraderMarginStatus(symbolIds, positions, margin);
+        require(initialMarginSafe, 'EO: insufficient margin');
         _updateTraderPortfolio(account, symbolIds, positions, positionUpdates, margin);
 
         emit Trade(account, symbolId, tradeVolume, params.intrinsicValue.itou(), params.timeValue.itou());
@@ -438,8 +440,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
         (uint256[] memory symbolIds, IPTokenOption.Position[] memory positions, , int256 margin) = _settleTraderFundingFee(account);
 
-        (int256 totalDynamicMargin,,int256 totalMinMaintenanceMargin) = _getTraderMarginRatio(symbolIds, positions, margin);
-        require( totalDynamicMargin < totalMinMaintenanceMargin, 'EO: cannot liquidate');
+        (,bool maintenanceMarginSafe) = _getTraderMarginStatus(symbolIds, positions, margin);
+        require( !maintenanceMarginSafe, 'EO: cannot liquidate');
 
 
         int256 netEquity = margin;
@@ -627,55 +629,37 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         }
     }
 
-//    function _getTraderMarginRatio(
-//        uint256[] memory symbolIds,
-//        IPTokenOption.Position[] memory positions,
-//        int256 margin
-//    ) internal view returns (int256) {
-//        int256 totalDynamicEquity = margin;
-//        int256 totalAbsCost;
-//        for (uint256 i = 0; i < symbolIds.length; i++) {
-//            if (positions[i].volume != 0) {
-//                SymbolInfo storage s = _symbols[symbolIds[i]];
-//                int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
-//                int256 cost = positions[i].volume * oraclePrice / ONE * s.multiplier / ONE;
-//                totalDynamicEquity += cost - positions[i].cost;
-//                totalAbsCost += cost.abs();
-//            }
-//        }
-//        return totalAbsCost == 0 ? type(int256).max : totalDynamicEquity * ONE / totalAbsCost;
-//    }
-
-    function _getTraderMarginRatio(
+    function _getTraderMarginStatus(
         uint256[] memory symbolIds,
         IPTokenOption.Position[] memory positions,
         int256 margin
-    ) internal view returns (int256, int256, int256) {
+    ) internal view returns (bool, bool) {
         int256 totalDynamicMargin = margin;
         int256 totalMinInitialMargin;
         for (uint256 i = 0; i < symbolIds.length; i++) {
             if (positions[i].volume != 0) {
-                SymbolInfo storage s = _symbols[symbolIds[i]];
-                int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
+                SymbolInfo memory s = _symbols[symbolIds[i]];
                 int256 cost = positions[i].volume * (s.intrinsicValue + s.timeValue) / ONE * s.multiplier / ONE;
                 totalDynamicMargin += cost - positions[i].cost;
 
-                int256 nominalValue = positions[i].volume * oraclePrice / ONE * s.multiplier / ONE;
-                totalMinInitialMargin += nominalValue * _dynamicMinInitialMarginRatio(oraclePrice, s.strikePrice, s.isCall) / ONE;
+                int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
+                int256 notionalValue = (positions[i].volume * oraclePrice / ONE * s.multiplier / ONE);
+//                int256 notionalValue = 0;
+                totalMinInitialMargin += notionalValue.abs() * _dynamicInitialMarginRatio(oraclePrice, s.strikePrice, s.isCall) / ONE;
             }
         }
-        int256 totalMinMaintenanceMargin = totalMinInitialMargin * _minMaintenanceMarginRatio / _minInitialMarginRatio;
-        return (totalDynamicMargin, totalMinInitialMargin, totalMinMaintenanceMargin);
+        int256 totalMinMaintenanceMargin = totalMinInitialMargin * _maintenanceMarginRatio / _initialMarginRatio;
+        return (totalDynamicMargin >= totalMinInitialMargin, totalDynamicMargin >= totalMinMaintenanceMargin);
     }
 
-    function _dynamicMinInitialMarginRatio(int256 spotPrice, int256 strikePrice, bool isCall) view public returns (int256) {
+    function _dynamicInitialMarginRatio(int256 spotPrice, int256 strikePrice, bool isCall) view public returns (int256) {
         if ((strikePrice>=spotPrice && !isCall) || (strikePrice<=spotPrice && isCall)) {
-            return _minInitialMarginRatio;
+            return _initialMarginRatio;
         }
         else {
-            int256 subRatio = isCall? ((strikePrice - spotPrice) * ONE / strikePrice) : ((spotPrice - strikePrice) * ONE /strikePrice);
-            int256 dynMinInitialMarginRatio = ((ONE - subRatio * 3) * _minInitialMarginRatio / ONE).max(10**16);
-            return dynMinInitialMarginRatio;
+            int256 OTMRatio = isCall? ((strikePrice - spotPrice) * ONE / strikePrice) : ((spotPrice - strikePrice) * ONE /strikePrice);
+            int256 dynInitialMarginRatio = ((ONE - OTMRatio * 3) * _initialMarginRatio / ONE).max(MinInitialMarginRatio);
+            return dynInitialMarginRatio;
         }
     }
 
