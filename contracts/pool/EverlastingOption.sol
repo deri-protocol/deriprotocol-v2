@@ -503,10 +503,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         SymbolInfo storage s = _symbols[symbolId];
         int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
         int256 volatility = IVolatilityOracle(s.volatilityAddress).getVolatility().utoi();
-        int256 optionPrice = s.isCall
-            ? OptionPricer.getEverlastingCallPrice(oraclePrice, s.strikePrice, volatility, _T)
-            : OptionPricer.getEverlastingPutPrice(oraclePrice, s.strikePrice, volatility, _T);
-        return optionPrice - intrinsicPrice;
+        int256 timeValue = OptionPricer.getEverlastingTimeValue(oraclePrice, s.strikePrice, volatility, _T);
+        return timeValue;
     }
 
 

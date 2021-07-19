@@ -306,30 +306,40 @@ contract EverlastingOptionPricing {
         return (res * ONE) >> 64;
     }
 
-    function calculateAB(int256 S, int256 K, int256 V, int256 T) internal pure returns (int256 A, int256 B) {
-        int256 sqrtT = utoi(sqrt(itou(T)));
-        int256 b = V * sqrtT / ONE / 2;
-        int256 b1 = utoi(sqrt(itou(b * b / ONE + ONE * 2)));
+    function integrateAB(int256 a, int256 b, int256 dx, int256 accuracy) internal pure returns (int256 A, int256 B) {
+        int256 x = dx / 2;
+        while (true) {
+            int256 v1 = a * ONE / x;
+            int256 v2 = b * x / ONE;
+            int256 v3 = x * x / ONE;
+            int256 v4 = -a * ONE / x * ONE / x;
 
-        if (S == K) {
-            A = b * ONE / b1;
-            B = -A;
-        } else {
-            int256 lnSK = ln(itou(S * ONE / K));
-            int256 a = lnSK * ONE / V * ONE / sqrtT;
-            if (S > K) {
-                A = -exp(-a * (b1 + b) / ONE) * (b1 - b) / b1;
-                B = -exp(-a * (b1 - b) / ONE) * (b1 + b) / b1;
-            } else {
-                A = exp(a * (b1 - b) / ONE) * (b1 + b) / b1;
-                B = exp(a * (b1 + b) / ONE) * (b1 - b) / b1;
+            int256 fA = exp(-(v1 + v2) * (v1 + v2) / ONE / 2 - v3) * (v4 + b) / ONE;
+            int256 fB = exp(-(v1 - v2) * (v1 - v2) / ONE / 2 - v3) * (v4 - b) / ONE;
+            int256 deltaA = fA * dx / ONE;
+            int256 deltaB = fB * dx / ONE;
+            A += deltaA;
+            B += deltaB;
+
+            if (A != 0 && abs(deltaA * ONE / A) < accuracy && B != 0 && abs(deltaB * ONE / B) < accuracy) {
+                break;
             }
+
+            x += dx;
         }
     }
 
     function getEverlastingTimeValue(int256 S, int256 K, int256 V, int256 T) public pure returns (int256) {
-        (int256 A, int256 B) = calculateAB(S, K, V, T);
-        return (S * A - K * B) / ONE / 2;
+        int256 lnSK = ln(itou(S * ONE / K));
+        int256 sqrtT = utoi(sqrt(itou(T)));
+        int256 a = lnSK * ONE / V * ONE / sqrtT;
+        int256 b = V * sqrtT / ONE / 2;
+
+        int256 dx = ONE / 5;            // dx = 0.2
+        int256 accuracy = ONE / 100;    // accuracy = 0.01
+        (int256 A, int256 B) = integrateAB(a, b, dx, accuracy);
+
+        return (S * A - K * B) / 2506628274631000064;   // sqrt(2 * pi)
     }
 
     function getEverlastingCallPrice(int256 S, int256 K, int256 V, int256 T) external pure returns (int256) {
