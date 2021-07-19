@@ -342,12 +342,12 @@ contract EverlastingOptionPricing {
         return (S * A - K * B) / 2506628274631000064;   // sqrt(2 * pi)
     }
 
-    function getEverlastingCallPrice(int256 S, int256 K, int256 V, int256 T) internal pure returns (int256) {
+    function getEverlastingCallPrice(int256 S, int256 K, int256 V, int256 T) external pure returns (int256) {
         int256 timeValue = getEverlastingTimeValue(S, K, V, T);
         return S > K ? S - K + timeValue : timeValue;
     }
 
-    function getEverlastingPutPrice(int256 S, int256 K, int256 V, int256 T) internal pure returns (int256) {
+    function getEverlastingPutPrice(int256 S, int256 K, int256 V, int256 T) external pure returns (int256) {
         int256 timeValue = getEverlastingTimeValue(S, K, V, T);
         return K > S ? K - S + timeValue : timeValue;
     }

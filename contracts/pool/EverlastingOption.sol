@@ -26,7 +26,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     IEverlastingOptionPricing public OptionPricer;
     int256 constant ONE = 10**18;
     int256 constant MinInitialMarginRatio = 10**16;
-    uint256 public _T = 10**18 / uint256(365); // premium funding period = 1 day
+    int256 public _T = 10**18 / int256(365); // premium funding period = 1 day
     int256 public _premiumFundingCoefficient = 10**18 / int256(3600*24); // premium funding rate per second
 
     uint256 immutable _decimals;
@@ -231,7 +231,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         s.K = k;
     }
 
-    function setPoolParameters(uint256 premiumFundingCoefficient, uint256 T, address everlastingPricingOptionAddress) external _controller_ {
+    function setPoolParameters(uint256 premiumFundingCoefficient, int256 T, address everlastingPricingOptionAddress) external _controller_ {
         _premiumFundingCoefficient = int256(premiumFundingCoefficient);
         _T = T;
         OptionPricer = IEverlastingOptionPricing(everlastingPricingOptionAddress);
@@ -501,11 +501,11 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     function _getTimeValuePrice(uint256 symbolId) public view returns (int256) {
         int256 intrinsicPrice = _getIntrinsicValuePrice(symbolId);
         SymbolInfo storage s = _symbols[symbolId];
-        uint256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice();
-        uint256 volatility = IVolatilityOracle(s.volatilityAddress).getVolatility();
+        int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
+        int256 volatility = IVolatilityOracle(s.volatilityAddress).getVolatility().utoi();
         int256 optionPrice = s.isCall
-            ? OptionPricer.getEverlastingCallPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), volatility, _T, 10**16)
-            : OptionPricer.getEverlastingPutPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), volatility, _T, 10**16);
+            ? OptionPricer.getEverlastingCallPrice(oraclePrice, s.strikePrice, volatility, _T)
+            : OptionPricer.getEverlastingPutPrice(oraclePrice, s.strikePrice, volatility, _T);
         return optionPrice - intrinsicPrice;
     }
 
