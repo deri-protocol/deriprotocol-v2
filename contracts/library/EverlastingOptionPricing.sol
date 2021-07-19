@@ -2,7 +2,9 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
-contract EverlastingOptionPricing {
+import "../interface/IEverlastingOptionPricing.sol";
+
+contract EverlastingOptionPricing is IEverlastingOptionPricing {
 
     // 2^127
     uint128 private constant TWO127 = 0x80000000000000000000000000000000;
@@ -363,7 +365,7 @@ contract EverlastingOptionPricing {
      * e.x. if allow settlement on every block, for a chain with 30000 blocks a day,
      * t is approximately 1 / 365 / 30000 (yearly)
      */
-    function getEverlastingCallPrice(uint256 S, uint256 K, uint256 vol, uint256 t, uint256 iterations) internal pure returns (int256) {
+    function getEverlastingCallPrice(uint256 S, uint256 K, uint256 vol, uint256 t, uint256 iterations) external pure override returns (int256) {
         int256 lnSK = ln(S * UONE / K);
         int256 divider = 2;
         int256 price;
@@ -376,7 +378,7 @@ contract EverlastingOptionPricing {
         return price;
     }
 
-    function getEverlastingPutPrice(uint256 S, uint256 K, uint256 vol, uint256 t, uint256 iterations) internal pure returns (int256) {
+    function getEverlastingPutPrice(uint256 S, uint256 K, uint256 vol, uint256 t, uint256 iterations) external pure override returns (int256) {
         int256 lnSK = ln(S * UONE / K);
         int256 divider = 2;
         int256 price;
@@ -397,7 +399,7 @@ contract EverlastingOptionPricing {
      *
      */
     function getEverlastingCallPriceConverge(uint256 S, uint256 K, uint256 vol, uint256 convergePeriod, uint256 iterations)
-        internal pure returns (int256)
+        external pure override returns (int256)
     {
         int256 lnSK = ln(S * UONE / K);
         int256 weight = (E - ONE) * ONE / E;
@@ -414,7 +416,7 @@ contract EverlastingOptionPricing {
     }
 
     function getEverlastingPutPriceConverge(uint256 S, uint256 K, uint256 vol, uint256 convergePeriod, uint256 iterations)
-        internal pure returns (int256)
+        external pure override returns (int256)
     {
         int256 lnSK = ln(S * UONE / K);
         int256 weight = (E - ONE) * ONE / E;
@@ -444,7 +446,7 @@ contract EverlastingOptionPricing {
      * Everlasting option pricing with converge approximation, utilizing early stop
      */
     function getEverlastingCallPriceConvergeEarlyStop(uint256 S, uint256 K, uint256 vol, uint256 convergePeriod, uint256 accuracy)
-        external pure returns (int256)
+        external pure override returns (int256)
     {
         Params memory params;
 
@@ -470,7 +472,7 @@ contract EverlastingOptionPricing {
     }
 
     function getEverlastingPutPriceConvergeEarlyStop(uint256 S, uint256 K, uint256 vol, uint256 convergePeriod, uint256 accuracy)
-        external pure returns (int256)
+        external pure override returns (int256)
     {
         Params memory params;
 

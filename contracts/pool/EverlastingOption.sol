@@ -13,7 +13,7 @@ import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
 import '../utils/Migratable.sol';
 import {PMMPricing} from '../library/PMMPricing.sol';
-import {EverlastingOptionPricing} from '../library/EverlastingOptionPricing.sol';
+import {IEverlastingOptionPricing} from '../interface/IEverlastingOptionPricing.sol';
 
 
 contract EverlastingOption is IEverlastingOption, Migratable {
@@ -22,8 +22,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     using SafeMath for int256;
     using SafeERC20 for IERC20;
 
-    PMMPricing public PRICING;
-    EverlastingOptionPricing public OPTIONPRICING;
+    PMMPricing public PmmPricer;
+    IEverlastingOptionPricing public OptionPricer;
     int256 constant ONE = 10**18;
     int256 constant MinInitialMarginRatio = 10**16;
     uint256 public _T = 10**18 / uint256(365); // premium funding period = 1 day
@@ -64,8 +64,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         address everlastingPricingOptionAddress,
         uint256[7] memory parameters,
         address[5] memory addresses) {
-        PRICING = PMMPricing(pricingAddress);
-        OPTIONPRICING = EverlastingOptionPricing(everlastingPricingOptionAddress);
+        PmmPricer = PMMPricing(pricingAddress);
+        OptionPricer = IEverlastingOptionPricing(everlastingPricingOptionAddress);
         _controller = msg.sender;
         _minPoolMarginRatio = int256(parameters[0]);
         _initialMarginRatio = int256(parameters[1]);
@@ -231,9 +231,10 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         s.K = k;
     }
 
-    function setPoolParameters(uint256 premiumFundingCoefficient, uint256 T) external _controller_ {
+    function setPoolParameters(uint256 premiumFundingCoefficient, uint256 T, address everlastingPricingOptionAddress) external _controller_ {
         _premiumFundingCoefficient = int256(premiumFundingCoefficient);
         _T = T;
+        OptionPricer = IEverlastingOptionPricing(everlastingPricingOptionAddress);
     }
 
 
@@ -503,8 +504,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         uint256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice();
         uint256 volatility = IVolatilityOracle(s.volatilityAddress).getVolatility();
         int256 optionPrice = s.isCall
-            ? OPTIONPRICING.getEverlastingCallPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), volatility, _T, 10**16)
-            : OPTIONPRICING.getEverlastingPutPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), volatility, _T, 10**16);
+            ? OptionPricer.getEverlastingCallPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), volatility, _T, 10**16)
+            : OptionPricer.getEverlastingPutPriceConvergeEarlyStop(oraclePrice, s.strikePrice.itou(), volatility, _T, 10**16);
         return optionPrice - intrinsicPrice;
     }
 
@@ -513,7 +514,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 timePrice = _getTimeValuePrice(symbolId);
         if (_liquidity <= 0) return timePrice;
         SymbolInfo storage s = _symbols[symbolId];
-        uint256 midPrice = PRICING.getTvMidPrice(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), (_liquidity + s.quote_balance_offset).itou(), s.K);
+        uint256 midPrice = PmmPricer.getTvMidPrice(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), (_liquidity + s.quote_balance_offset).itou(), s.K);
         return midPrice.utoi();
     }
 
@@ -522,7 +523,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         require(volume != 0, "invalid tradeVolume");
         int256 timePrice = _getTimeValuePrice(symbolId);
         SymbolInfo storage s = _symbols[symbolId];
-        tvCost = PRICING.queryTradePMM(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), volume, (_liquidity + s.quote_balance_offset).itou(),  s.K);
+        tvCost = PmmPricer.queryTradePMM(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), volume, (_liquidity + s.quote_balance_offset).itou(),  s.K);
     }
 
 
