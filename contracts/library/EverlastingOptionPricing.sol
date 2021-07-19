@@ -335,7 +335,7 @@ contract EverlastingOptionPricing {
         int256 a = lnSK * ONE / V * ONE / sqrtT;
         int256 b = V * sqrtT / ONE / 2;
 
-        int256 dx = ONE / 5;            // dx = 0.5
+        int256 dx = ONE / 5;            // dx = 0.2
         int256 accuracy = ONE / 100;    // accuracy = 0.01
         (int256 A, int256 B) = integrateAB(a, b, dx, accuracy);
 
