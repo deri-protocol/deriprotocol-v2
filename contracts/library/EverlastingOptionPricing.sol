@@ -327,7 +327,7 @@ contract EverlastingOptionPricing {
         }
     }
 
-    function getEverlastingTimeValue(int256 S, int256 K, int256 V, int256 T) external pure returns (int256) {
+    function getEverlastingTimeValue(int256 S, int256 K, int256 V, int256 T) public pure returns (int256) {
         (int256 A, int256 B) = calculateAB(S, K, V, T);
         return (S * A - K * B) / ONE / 2;
     }
