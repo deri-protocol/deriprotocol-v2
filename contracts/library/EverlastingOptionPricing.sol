@@ -307,22 +307,20 @@ contract EverlastingOptionPricing {
     }
 
     function calculateAB(int256 S, int256 K, int256 V, int256 T) internal pure returns (int256 A, int256 B) {
-        int256 sqrtT = utoi(sqrt(itou(T)));
-        int256 b = V * sqrtT / ONE / 2;
-        int256 b1 = utoi(sqrt(itou(b * b / ONE + ONE * 2)));
+        int256 u2 = ONE * 8 * ONE / V * ONE / V * ONE / T + ONE;
+        int256 u = utoi(sqrt(itou(u2)));
 
         if (S == K) {
-            A = b * ONE / b1;
+            A = ONE * ONE / u;
             B = -A;
         } else {
-            int256 lnSK = ln(itou(S * ONE / K));
-            int256 a = lnSK * ONE / V * ONE / sqrtT;
+            int256 w = ln(itou(S * ONE / K)) / 2;
             if (S > K) {
-                A = -exp(-a * (b1 + b) / ONE) * (b1 - b) / b1;
-                B = -exp(-a * (b1 - b) / ONE) * (b1 + b) / b1;
+                A = -exp(-w * (u + ONE) / ONE) * (u - ONE) / u;
+                B = -exp(-w * (u - ONE) / ONE) * (u + ONE) / u;
             } else {
-                A = exp(a * (b1 - b) / ONE) * (b1 + b) / b1;
-                B = exp(a * (b1 + b) / ONE) * (b1 - b) / b1;
+                A = exp(w * (u - ONE) / ONE) * (u + ONE) / u;
+                B = exp(w * (u + ONE) / ONE) * (u - ONE) / u;
             }
         }
     }
