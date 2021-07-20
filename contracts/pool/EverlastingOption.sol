@@ -500,7 +500,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     }
 
     function _getTimeValuePrice(uint256 symbolId) public view returns (int256) {
-        int256 intrinsicPrice = _getIntrinsicValuePrice(symbolId);
         SymbolInfo storage s = _symbols[symbolId];
         int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
         int256 volatility = IVolatilityOracle(s.volatilityAddress).getVolatility().utoi();
