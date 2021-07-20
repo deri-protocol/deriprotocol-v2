@@ -287,7 +287,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     // Core logics
     //================================================================================
     function _addLiquidity(address account, uint256 bAmount) internal _lock_ {
-        (int256 totalDynamicEquity, ) = _updateSymbolPricesAndFundingRates();
+        (int256 totalDynamicEquity, , ) = _updateSymbolPricesAndFundingRates();
 
         bAmount = _transferIn(account, bAmount);
         ILTokenOption lToken = ILTokenOption(_lTokenAddress);
@@ -307,7 +307,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     }
 
     function _removeLiquidity(address account, uint256 lShares) internal _lock_ {
-        (int256 totalDynamicEquity, int256 totalAbsCost) = _updateSymbolPricesAndFundingRates();
+        (int256 totalDynamicEquity, int256 totalAbsCost, ) = _updateSymbolPricesAndFundingRates();
         ILTokenOption lToken = ILTokenOption(_lTokenAddress);
 
         uint256 totalSupply = lToken.totalSupply();
@@ -369,10 +369,11 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 fee;
         int256 realizedCost;
         int256 protocolFee;
+        int256 tvCost;
     }
 
     function _trade(address account, uint256 symbolId, int256 tradeVolume) internal _lock_ {
-        (int256 totalDynamicEquity, int256 totalAbsCost) = _updateSymbolPricesAndFundingRates();
+        (int256 totalDynamicEquity, int256 totalAbsCost, int256[] memory timePrices) = _updateSymbolPricesAndFundingRates();
 
         (uint256[] memory symbolIds,
          IPTokenOption.Position[] memory positions,
@@ -389,14 +390,14 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
         TradeParams memory params;
 
-        int256 tvCost = _queryTradePMM(symbolId, tradeVolume * _symbols[symbolId].multiplier / ONE);
-        _symbols[symbolId].quote_balance_offset += tvCost;
+        params.tvCost = _queryTradePMM(symbolId, tradeVolume * _symbols[symbolId].multiplier / ONE, timePrices[index]);
+        _symbols[symbolId].quote_balance_offset += params.tvCost;
 
         params.tradersNetVolume = _symbols[symbolId].tradersNetVolume;
         params.intrinsicValue = _symbols[symbolId].intrinsicValue;
         params.timeValue = _symbols[symbolId].timeValue;
         params.multiplier = _symbols[symbolId].multiplier;
-        params.curCost = tradeVolume * params.intrinsicValue / ONE * params.multiplier / ONE + tvCost;
+        params.curCost = tradeVolume * params.intrinsicValue / ONE * params.multiplier / ONE + params.tvCost;
         params.fee = params.curCost.abs() * _symbols[symbolId].feeRatio / ONE;
 
         if (!(positions[index].volume >= 0 && tradeVolume >= 0) && !(positions[index].volume <= 0 && tradeVolume <= 0)) {
@@ -437,7 +438,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     }
 
     function _liquidate(address liquidator, address account) internal _lock_ {
-        _updateSymbolPricesAndFundingRates();
+        ( , , int256[] memory timePrices) = _updateSymbolPricesAndFundingRates();
 
         (uint256[] memory symbolIds, IPTokenOption.Position[] memory positions, , int256 margin) = _settleTraderFundingFee(account);
 
@@ -448,7 +449,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 netEquity = margin;
         for (uint256 i = 0; i < symbolIds.length; i++) {
             if (positions[i].volume != 0) {
-                int256 tvCost = _queryTradePMM(symbolIds[i], -positions[i].volume * _symbols[symbolIds[i]].multiplier / ONE);
+                int256 tvCost = _queryTradePMM(symbolIds[i], -positions[i].volume * _symbols[symbolIds[i]].multiplier / ONE, timePrices[i]);
                 _symbols[symbolIds[i]].quote_balance_offset += tvCost;
                 _symbols[symbolIds[i]].tradersNetVolume -= positions[i].volume;
                 _symbols[symbolIds[i]].tradersNetCost -= positions[i].cost;
@@ -499,7 +500,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     }
 
     function _getTimeValuePrice(uint256 symbolId) public view returns (int256) {
-        int256 intrinsicPrice = _getIntrinsicValuePrice(symbolId);
         SymbolInfo storage s = _symbols[symbolId];
         int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
         int256 volatility = IVolatilityOracle(s.volatilityAddress).getVolatility().utoi();
@@ -508,38 +508,39 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     }
 
 
-    function _getTvMidPrice(uint256 symbolId) public view returns (int256) {
+    function _getTvMidPrice(uint256 symbolId) public view returns (int256, int256) {
         int256 timePrice = _getTimeValuePrice(symbolId);
-        if (_liquidity <= 0) return timePrice;
+        if (_liquidity <= 0) return (timePrice, timePrice);
         SymbolInfo storage s = _symbols[symbolId];
         uint256 midPrice = PmmPricer.getTvMidPrice(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), (_liquidity + s.quote_balance_offset).itou(), s.K);
-        return midPrice.utoi();
+        return (timePrice, midPrice.utoi());
     }
 
 
-    function _queryTradePMM(uint256 symbolId, int256 volume) public view returns (int256 tvCost) {
+    function _queryTradePMM(uint256 symbolId, int256 volume, int256 timePrice) public view returns (int256 tvCost) {
         require(volume != 0, "invalid tradeVolume");
-        int256 timePrice = _getTimeValuePrice(symbolId);
         SymbolInfo storage s = _symbols[symbolId];
         tvCost = PmmPricer.queryTradePMM(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), volume, (_liquidity + s.quote_balance_offset).itou(),  s.K);
     }
 
 
-    function _updateSymbolPricesAndFundingRates() internal returns (int256 totalDynamicEquity, int256 totalAbsCost) {
+    function _updateSymbolPricesAndFundingRates() internal returns (int256 totalDynamicEquity, int256 totalAbsCost, int256[] memory timePrices) {
         uint256 preTimestamp = _lastTimestamp;
         uint256 curTimestamp = block.timestamp;
         uint256[] memory symbolIds = IPTokenOption(_pTokenAddress).getActiveSymbolIds();
+        timePrices = new int256[](symbolIds.length);
 
         totalDynamicEquity = _liquidity;
         for (uint256 i = 0; i < symbolIds.length; i++) {
             SymbolInfo storage s = _symbols[symbolIds[i]];
             int256 intrinsicPrice = _getIntrinsicValuePrice(symbolIds[i]);
-            int256 timePrice = _getTvMidPrice(symbolIds[i]);
+            (int256 timePrice, int256 midPrice) = _getTvMidPrice(symbolIds[i]);
             s.intrinsicValue = intrinsicPrice;
-            s.timeValue = timePrice;
+            s.timeValue = midPrice;
+            timePrices[i] = timePrice;
 
             if (s.tradersNetVolume != 0) {
-                int256 cost = s.tradersNetVolume * (intrinsicPrice + timePrice) / ONE * s.multiplier / ONE;
+                int256 cost = s.tradersNetVolume * (intrinsicPrice + midPrice) / ONE * s.multiplier / ONE;
                 totalDynamicEquity -= cost - s.tradersNetCost;
                 totalAbsCost += cost.abs();
             }
