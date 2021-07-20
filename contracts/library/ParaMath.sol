@@ -121,42 +121,42 @@ library ParaMath {
         given oracle price
         B0 == Q0 / price
     */
-    function _RegressionTargetWhenShort(
-        uint256 Q1,
-        uint256 price,
-        uint256 deltaB,
-        uint256 k
-    )
-        internal pure returns (uint256 B0,  uint256 Q0)
-    {
-        uint256 denominator = DecimalMath.mul(DecimalMath.ONE * 2, DecimalMath.ONE + k.sqrt());
-        uint256 edgePrice = DecimalMath.divCeil(Q1, denominator);
-        require(k < edgePrice, "Unable to long under current pool status!");
-        uint256 ideltaB = DecimalMath.mul(deltaB, price);
-        uint256 ac = ideltaB * 4 * (Q1 - ideltaB + (DecimalMath.mul(ideltaB,k)));
-        uint256 square = (Q1 * Q1) - ac;
-        uint256 sqrt = square.sqrt();
-        B0 = DecimalMath.divCeil(Q1 + sqrt, price * 2);
-        Q0 = DecimalMath.mul(B0, price);
-    }
+//    function _RegressionTargetWhenShort(
+//        uint256 Q1,
+//        uint256 price,
+//        uint256 deltaB,
+//        uint256 k
+//    )
+//        internal pure returns (uint256 B0,  uint256 Q0)
+//    {
+//        uint256 denominator = DecimalMath.mul(DecimalMath.ONE * 2, DecimalMath.ONE + k.sqrt());
+//        uint256 edgePrice = DecimalMath.divCeil(Q1, denominator);
+//        require(k < edgePrice, "Unable to long under current pool status!");
+//        uint256 ideltaB = DecimalMath.mul(deltaB, price);
+//        uint256 ac = ideltaB * 4 * (Q1 - ideltaB + (DecimalMath.mul(ideltaB,k)));
+//        uint256 square = (Q1 * Q1) - ac;
+//        uint256 sqrt = square.sqrt();
+//        B0 = DecimalMath.divCeil(Q1 + sqrt, price * 2);
+//        Q0 = DecimalMath.mul(B0, price);
+//    }
 
     /*
         Update BaseTarget when AMM holds long position
         given oracle price
         B0 == Q0 / price
     */
-    function _RegressionTargetWhenLong(
-        uint256 Q1,
-        uint256 price,
-        uint256 deltaB,
-        uint256 k
-    )
-       internal pure returns (uint256 B0, uint256 Q0)
-    {
-        uint256 square = Q1 * Q1 + (DecimalMath.mul(deltaB, price) * (DecimalMath.mul(Q1, k) * 4));
-        uint256 sqrt = square.sqrt();
-        uint256 deltaQ = DecimalMath.divCeil(sqrt - Q1, k * 2);
-        Q0 = Q1 + deltaQ;
-        B0 = DecimalMath.divCeil(Q0, price);
-    }
+//    function _RegressionTargetWhenLong(
+//        uint256 Q1,
+//        uint256 price,
+//        uint256 deltaB,
+//        uint256 k
+//    )
+//       internal pure returns (uint256 B0, uint256 Q0)
+//    {
+//        uint256 square = Q1 * Q1 + (DecimalMath.mul(deltaB, price) * (DecimalMath.mul(Q1, k) * 4));
+//        uint256 sqrt = square.sqrt();
+//        uint256 deltaQ = DecimalMath.divCeil(sqrt - Q1, k * 2);
+//        Q0 = Q1 + deltaQ;
+//        B0 = DecimalMath.divCeil(Q0, price);
+//    }
 }

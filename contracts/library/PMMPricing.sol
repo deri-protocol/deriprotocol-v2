@@ -36,12 +36,12 @@ contract PMMPricing {
         uint256 deltaQuote;
         int256 tvCost;
         if (volume >= 0) {
-            (deltaQuote, ) = _queryBuyBaseToken(
+            deltaQuote = _queryBuyBaseToken(
                 updateBalance, timePrice, K, volume.itou()
             );
             tvCost = deltaQuote.utoi();
         } else {
-            (deltaQuote, ) = _querySellBaseToken(
+            deltaQuote = _querySellBaseToken(
                 updateBalance, timePrice, K, (-volume).itou()
             );
             tvCost = -(deltaQuote.utoi());
@@ -191,7 +191,7 @@ contract PMMPricing {
 
     function _querySellBaseToken(IEverlastingOption.VirtualBalance memory updateBalance, uint256 price, uint256 K, uint256 sellBaseAmount)
     public view
-    returns (uint256 receiveQuote, IEverlastingOption.VirtualBalance memory newUpdateBalance)
+    returns (uint256 receiveQuote)
     {
         uint256 newDeltaB;
         IEverlastingOption.Side newSide;
@@ -218,14 +218,14 @@ contract PMMPricing {
             newDeltaB = updateBalance.baseBalance - updateBalance.baseTarget + sellBaseAmount;
         }
 
-        // count fees
-        if (newSide == IEverlastingOption.Side.FLAT) {
-            newUpdateBalance = _expectedTargetHelperWhenBalanced(updateBalance.quoteBalance, price);
-        } else {
-            newUpdateBalance = _expectedTargetHelperWhenBiased(newSide, updateBalance.quoteBalance, price, newDeltaB, K);
-        }
+//        // count fees
+//        if (newSide == IEverlastingOption.Side.FLAT) {
+//            newUpdateBalance = _expectedTargetHelperWhenBalanced(updateBalance.quoteBalance, price);
+//        } else {
+//            newUpdateBalance = _expectedTargetHelperWhenBiased(newSide, updateBalance.quoteBalance, price, newDeltaB, K);
+//        }
 
-        return (receiveQuote, newUpdateBalance);
+        return receiveQuote;
     }
 
     // to avoid stack too deep
@@ -279,7 +279,7 @@ contract PMMPricing {
 
     function _queryBuyBaseToken(IEverlastingOption.VirtualBalance memory updateBalance, uint256 price, uint256 K, uint256 buyBaseAmount)
     public view
-    returns (uint256 payQuote, IEverlastingOption.VirtualBalance memory newUpdateBalance)
+    returns (uint256 payQuote)
     {
         uint256 newDeltaB;
         IEverlastingOption.Side newSide;
@@ -304,12 +304,12 @@ contract PMMPricing {
                 (payQuote, newSide, newDeltaB) = _buyHelperRBelowOne(buyBaseAmount, K, price, updateBalance.baseBalance - updateBalance.baseTarget, updateBalance.baseTarget, updateBalance.quoteTarget, updateBalance.quoteBalance);
             }
         }
-        if (newSide == IEverlastingOption.Side.FLAT) {
-            newUpdateBalance = _expectedTargetHelperWhenBalanced(updateBalance.quoteBalance, price);
-        } else {
-            newUpdateBalance = _expectedTargetHelperWhenBiased(newSide, updateBalance.quoteBalance, price, newDeltaB, K);
-        }
-        return (payQuote, newUpdateBalance);
+//        if (newSide == IEverlastingOption.Side.FLAT) {
+//            newUpdateBalance = _expectedTargetHelperWhenBalanced(updateBalance.quoteBalance, price);
+//        } else {
+//            newUpdateBalance = _expectedTargetHelperWhenBiased(newSide, updateBalance.quoteBalance, price, newDeltaB, K);
+//        }
+        return payQuote;
     }
 
 }

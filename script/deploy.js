@@ -78,6 +78,9 @@ async function main() {
         604800)
     await new Promise(resolve => setTimeout(resolve, 2000))
 
+    logger.log("volatilityOracleBTC.address", volatilityOracleBTC.address)
+    logger.log("volatilityOracleBTC.address", volatilityOracleETH.address)
+
 
     await pool.addSymbol(
         0, 'BTCUSD-30000-C',
