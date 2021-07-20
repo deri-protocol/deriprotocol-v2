@@ -159,7 +159,7 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
     }
 
     function collectProtocolFee() external override {
-        uint256 balance = IERC20(_bTokenAddress).balanceOf(address(this)).rescale(_decimals, 18);
+        uint256 balance = IERC20(_bTokenAddress).balanceOf(address(this));
         uint256 amount = _protocolFeeAccrued.itou();
         if (amount > balance) amount = balance;
         _protocolFeeAccrued -= amount.utoi();
