@@ -138,10 +138,8 @@ library PMMCurve {
     )
         internal pure returns (uint256 B0,  uint256 Q0)
     {
-        uint256 denominator = DecimalMath.mul(DecimalMath.ONE * 2, DecimalMath.ONE + k.sqrt());
-        uint256 edgePrice = DecimalMath.divCeil(Q1, denominator);
-        require(k < edgePrice, "Unable to long under current pool status!");
         uint256 ideltaB = DecimalMath.mul(deltaB, price);
+        require( Q1*Q1 + 4*ideltaB*ideltaB > 4*ideltaB*Q1 + DecimalMath.mul(4*k, ideltaB*ideltaB), "Unable to long under current pool status!");
         uint256 ac = ideltaB * 4 * (Q1 - ideltaB + DecimalMath.mul(ideltaB,k));
         uint256 square = (Q1 * Q1) - ac;
         uint256 sqrt = square.sqrt();
