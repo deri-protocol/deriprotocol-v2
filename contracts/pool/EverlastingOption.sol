@@ -542,6 +542,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256[] memory deltas = new int256[](symbolIds.length);
         timePrices = new int256[](symbolIds.length);
 
+
         totalDynamicEquity = _liquidity;
         for (uint256 i = 0; i < symbolIds.length; i++) {
             SymbolInfo storage s = _symbols[symbolIds[i]];

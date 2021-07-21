@@ -21,7 +21,7 @@ library PMMCurve {
     // Solving the quadratic equation for trading
     function _ROneSellBaseToken(uint256 price, uint256 k, uint256 amount, uint256 targetQuoteTokenAmount)
         internal
-        view
+        pure
         returns (uint256 receiveQuoteToken)
     {
         uint256 Q2 =
@@ -39,7 +39,7 @@ library PMMCurve {
 
     function _ROneBuyBaseToken(uint256 price, uint256 k, uint256 amount, uint256 targetBaseTokenAmount)
         internal
-        view
+        pure
         returns (uint256 payQuoteToken)
     {
         require(amount < targetBaseTokenAmount, "PARA_BASE_BALANCE_NOT_ENOUGH");
@@ -62,7 +62,7 @@ library PMMCurve {
         uint256 amount,
         uint256 quoteBalance,
         uint256 targetQuoteAmount
-    ) internal view returns (uint256 receieQuoteToken) {
+    ) internal pure returns (uint256 receieQuoteToken) {
         uint256 Q2 =
             ParaMath._SolveQuadraticFunctionForTrade(
                 targetQuoteAmount,
@@ -80,7 +80,7 @@ library PMMCurve {
         uint256 amount,
         uint256 quoteBalance,
         uint256 targetQuoteAmount
-    ) internal view returns (uint256 payQuoteToken) {
+    ) internal pure returns (uint256 payQuoteToken) {
         // Here we don't require amount less than some value
         // Because it is limited at upper function
         // See Trader.queryBuyBaseToken
@@ -103,7 +103,7 @@ library PMMCurve {
         uint256 amount,
         uint256 baseBalance,
         uint256 targetBaseAmount
-    ) internal view returns (uint256 payQuoteToken) {
+    ) internal pure returns (uint256 payQuoteToken) {
         require(amount < baseBalance, "PARA_BASE_BALANCE_NOT_ENOUGH");
         uint256 B2 = baseBalance - amount;
         return _RAboveIntegrate(
@@ -117,7 +117,7 @@ library PMMCurve {
         uint256 amount,
         uint256 baseBalance,
         uint256 targetBaseAmount
-    ) internal view returns (uint256 receiveQuoteToken) {
+    ) internal pure returns (uint256 receiveQuoteToken) {
         // here we don't require B1 <= targetBaseAmount
         // Because it is limited at upper function
         // See Trader.querySellBaseToken

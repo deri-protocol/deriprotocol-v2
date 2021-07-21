@@ -19,7 +19,7 @@ contract PMMPricing {
     using SafeMath for uint256;
     using SafeMath for int256;
 
-    function getTvMidPrice(int256 timePrice, int256 deltaB, int256 equity, uint256 K) external view returns (int256) {
+    function getTvMidPrice(int256 timePrice, int256 deltaB, int256 equity, uint256 K) external pure returns (int256) {
         if (equity <=0) {
             return timePrice;
         }
@@ -31,7 +31,7 @@ contract PMMPricing {
         return midPrice.utoi();
     }
 
-    function queryTradePMM(int256 timePrice, int256 deltaB, int256 volume, int256 equity, uint256 K) external view returns (int256) {
+    function queryTradePMM(int256 timePrice, int256 deltaB, int256 volume, int256 equity, uint256 K) external pure returns (int256) {
         IEverlastingOption.Side side = deltaB == 0 ? IEverlastingOption.Side.FLAT : (deltaB > 0 ? IEverlastingOption.Side.SHORT : IEverlastingOption.Side.LONG);
         IEverlastingOption.VirtualBalance memory updateBalance = getExpectedTargetExt(
             side, equity.itou(), timePrice.itou(), deltaB.abs().itou(), K
@@ -60,7 +60,7 @@ contract PMMPricing {
         uint256 price,
         uint256 deltaB,
         uint256 _K_
-    ) internal view returns (
+    ) internal pure returns (
         IEverlastingOption.VirtualBalance memory updateBalance
     ) {
         if (side == IEverlastingOption.Side.SHORT) {
@@ -97,7 +97,7 @@ contract PMMPricing {
         uint256 _K_
     )
     public
-    view
+    pure
     returns (IEverlastingOption.VirtualBalance memory) {
         if (side == IEverlastingOption.Side.FLAT) {
             return _expectedTargetHelperWhenBalanced(quoteBalance, price);
@@ -113,7 +113,7 @@ contract PMMPricing {
     }
 
 
-    function getMidPrice(IEverlastingOption.VirtualBalance memory updateBalance, uint256 oraclePrice, uint256 K) public view returns (uint256) {
+    function getMidPrice(IEverlastingOption.VirtualBalance memory updateBalance, uint256 oraclePrice, uint256 K) public pure returns (uint256) {
         if (updateBalance.newSide == IEverlastingOption.Side.LONG) {
             uint256 R =
             DecimalMath.divFloor(
@@ -141,7 +141,7 @@ contract PMMPricing {
         uint256 baseTarget,
         uint256 baseBalance,
         uint256 quoteTarget
-    ) internal view returns (
+    ) internal pure returns (
         uint256 receiveQuote,
         IEverlastingOption.Side newSide,
         uint256 newDeltaB)
@@ -193,7 +193,7 @@ contract PMMPricing {
     }
 
     function _querySellBaseToken(IEverlastingOption.VirtualBalance memory updateBalance, uint256 price, uint256 K, uint256 sellBaseAmount)
-    public view
+    public pure
     returns (uint256 receiveQuote)
     {
         uint256 newDeltaB;
@@ -240,7 +240,7 @@ contract PMMPricing {
         uint256 baseTarget,
         uint256 quoteTarget,
         uint256 quoteBalance
-    ) internal view returns (
+    ) internal pure returns (
         uint256 payQuote,
         IEverlastingOption.Side newSide,
         uint256 newDeltaB
@@ -281,7 +281,7 @@ contract PMMPricing {
 
 
     function _queryBuyBaseToken(IEverlastingOption.VirtualBalance memory updateBalance, uint256 price, uint256 K, uint256 buyBaseAmount)
-    public view
+    public pure
     returns (uint256 payQuote)
     {
         uint256 newDeltaB;
