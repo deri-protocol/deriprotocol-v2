@@ -4,18 +4,11 @@ pragma solidity >=0.8.0 <0.9.0;
 
 contract EverlastingOptionPricing {
 
-    // 2^127
-    uint128 private constant TWO127 = 0x80000000000000000000000000000000;
-    // 2^128 - 1
-    uint128 private constant TWO128_1 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-    // ln(2) * 2^128
-    uint128 private constant LN2 = 0xb17217f7d1cf79abc9e3b39803f2f6af;
-
-    int128 private constant MAX_64x64 = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
-
-    int256 private constant ONE = 10**18;
+    uint128 private constant TWO127 = 0x80000000000000000000000000000000;   // 2^127
+    uint128 private constant TWO128_1 = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF; // 2^128 - 1
+    int128  private constant MAX_64x64 = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+    int256  private constant ONE = 10**18;
     uint256 private constant UONE = 10**18;
-    int256 private constant E = 2718281828459045000;
 
     function utoi(uint256 a) internal pure returns (int256) {
         require(a <= 2**255 - 1);
@@ -25,11 +18,6 @@ contract EverlastingOptionPricing {
     function itou(int256 a) internal pure returns (uint256) {
         require(a >= 0);
         return uint256(a);
-    }
-
-    function abs(int256 a) internal pure returns (int256) {
-        require(a >= -2**255);
-        return a >= 0 ? a : -a;
     }
 
     function int256To128(int256 a) internal pure returns (int128) {
@@ -89,58 +77,13 @@ contract EverlastingOptionPricing {
         return result;
     }
 
-    /*
-     * Calculate ln (x / 2^128) * 2^128.
-     *
-     * @param x parameter value
-     * @return ln (x / 2^128) * 2^128
-     */
-    function _ln (uint256 x) internal pure returns (int256) {
-        require (x > 0);
-
-        int256 l2 = _log_2 (x);
-        if (l2 == 0) return 0;
-        else {
-            uint256 al2 = uint256 (l2 > 0 ? l2 : -l2);
-            uint8 msb = mostSignificantBit (al2);
-            if (msb > 127) al2 >>= msb - 127;
-            al2 = (al2 * LN2 + TWO127) >> 128;
-            if (msb > 127) al2 <<= msb - 127;
-
-            return l2 >= 0 ? int256(al2) : -int256(al2);
-        }
-    }
-
-    // x in 18 decimals, return in 18 decimals
-    function log_2(uint256 x) internal pure returns (int256) {
-        int256 res = _log_2((x << 128) / 10**18);
-        return (res * 10**18) >> 128;
-    }
-
-    // x in 18 decimals, return in 18 decimals
-    function ln(uint256 x) internal pure returns (int256) {
-        int256 res = _ln((x << 128) / 10**18);
-        return (res * 10**18) >> 128;
-    }
-
-    // x in 18 decimals, y in 18 decimals
-    function sqrt(uint256 x) internal pure returns (uint256 y) {
-        x *= UONE;
-        uint256 z = x / 2 + 1;
-        y = x;
-        while (z < y) {
-            y = z;
-            z = (x / z + z) / 2;
-        }
-    }
-
     /**
      * Calculate binary exponent of x.  Revert on overflow.
      *
      * @param x signed 64.64-bit fixed point number
      * @return signed 64.64-bit fixed point number
      */
-    function exp_2 (int128 x) internal pure returns (int128) {
+    function _exp_2 (int128 x) internal pure returns (int128) {
         unchecked {
             require (x < 0x400000000000000000); // Overflow
 
@@ -284,60 +227,53 @@ contract EverlastingOptionPricing {
         }
     }
 
-    /**
-     * Calculate natural exponent of x.  Revert on overflow.
-     *
-     * @param x signed 64.64-bit fixed point number
-     * @return signed 64.64-bit fixed point number
-     */
-    function _exp (int128 x) internal pure returns (int128) {
-        unchecked {
-            require (x < 0x400000000000000000); // Overflow
-
-            if (x < -0x400000000000000000) return 0; // Underflow
-
-            return exp_2 (int128 (int256 (x) * 0x171547652B82FE1777D0FFDA0D23A7D12 >> 128));
+    // x in 18 decimals, y in 18 decimals
+    function sqrt(uint256 x) internal pure returns (uint256 y) {
+        x *= UONE;
+        uint256 z = x / 2 + 1;
+        y = x;
+        while (z < y) {
+            y = z;
+            z = (x / z + z) / 2;
         }
     }
 
-    // x in 18 decimals, return in 18 decimals
-    function exp(int256 x) internal pure returns (int256) {
-        int128 res = _exp(int256To128((x << 64) / ONE));
-        return (res * ONE) >> 64;
+    // calculate x^y, x, y and return in 18 decimals
+    function exp(uint256 x, int256 y) internal pure returns (int256) {
+        int256 log2x = _log_2((x << 128) / UONE) * ONE >> 128;
+        int256 p = log2x * y / ONE;
+        return _exp_2(int256To128((p << 64) / ONE)) * ONE >> 64;
     }
 
-    function calculateAB(int256 S, int256 K, int256 V, int256 T) internal pure returns (int256 A, int256 B) {
+    function getEverlastingTimeValue(int256 S, int256 K, int256 V, int256 T) external pure returns (int256 timeValue) {
         int256 u2 = ONE * 8 * ONE / V * ONE / V * ONE / T + ONE;
         int256 u = utoi(sqrt(itou(u2)));
 
-        if (S == K) {
-            A = ONE * ONE / u;
-            B = -A;
+        uint256 x = itou(S * ONE / K);
+        if (S > K) {
+            timeValue = K * exp(x, (ONE - u) / 2) / u;
+        } else if (S == K) {
+            timeValue = K * ONE / u;
         } else {
-            int256 w = ln(itou(S * ONE / K)) / 2;
-            if (S > K) {
-                A = -exp(-w * (u + ONE) / ONE) * (u - ONE) / u;
-                B = -exp(-w * (u - ONE) / ONE) * (u + ONE) / u;
-            } else {
-                A = exp(w * (u - ONE) / ONE) * (u + ONE) / u;
-                B = exp(w * (u + ONE) / ONE) * (u - ONE) / u;
-            }
+            timeValue = K * exp(x, (ONE + u) / 2) / u;
         }
     }
 
-    function getEverlastingTimeValue(int256 S, int256 K, int256 V, int256 T) public pure returns (int256) {
-        (int256 A, int256 B) = calculateAB(S, K, V, T);
-        return (S * A - K * B) / ONE / 2;
-    }
+    function getEverlastingTimeValueAndDelta(int256 S, int256 K, int256 V, int256 T) external pure returns (int256 timeValue, int256 delta) {
+        int256 u2 = ONE * 8 * ONE / V * ONE / V * ONE / T + ONE;
+        int256 u = utoi(sqrt(itou(u2)));
 
-    function getEverlastingCallPrice(int256 S, int256 K, int256 V, int256 T) external pure returns (int256) {
-        int256 timeValue = getEverlastingTimeValue(S, K, V, T);
-        return S > K ? S - K + timeValue : timeValue;
-    }
-
-    function getEverlastingPutPrice(int256 S, int256 K, int256 V, int256 T) external pure returns (int256) {
-        int256 timeValue = getEverlastingTimeValue(S, K, V, T);
-        return K > S ? K - S + timeValue : timeValue;
+        uint256 x = itou(S * ONE / K);
+        if (S > K) {
+            timeValue = K * exp(x, (ONE - u) / 2) / u;
+            delta = (ONE - u) * timeValue / S / 2;
+        } else if (S == K) {
+            timeValue = K * ONE / u;
+            delta = 0;
+        } else {
+            timeValue = K * exp(x, (ONE + u) / 2) / u;
+            delta = (ONE + u) * timeValue / S / 2;
+        }
     }
 
 }
