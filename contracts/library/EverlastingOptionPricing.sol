@@ -125,13 +125,13 @@ contract EverlastingOptionPricing {
 
     // x in 18 decimals, y in 18 decimals
     function sqrt(uint256 x) internal pure returns (uint256 y) {
+        x *= UONE;
         uint256 z = x / 2 + 1;
         y = x;
         while (z < y) {
             y = z;
             z = (x / z + z) / 2;
         }
-        y *= 10**9;
     }
 
     /**
