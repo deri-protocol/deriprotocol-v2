@@ -59,4 +59,39 @@ library SafeMath {
         }
     }
 
+    function divCeil(uint256 a, uint256 b) internal pure returns (uint256) {
+        uint256 quotient = a / b;
+        uint256 remainder = a - quotient * b;
+        if (remainder > 0) {
+            return quotient + 1;
+        } else {
+            return quotient;
+        }
+    }
+
+    function sqrt(uint256 x) internal pure returns (uint256 y) {
+        uint256 z = x / 2 + 1;
+        y = x;
+        while (z < y) {
+            y = z;
+            z = (x / z + z) / 2;
+        }
+    }
+
+    function max(int256 a, int256 b) internal pure returns (int256) {
+        return a >= b ? a : b;
+    }
+
+    function max(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a >= b ? a : b;
+    }
+
+    function min(uint256 a, uint256 b) internal pure returns (uint256) {
+        return a <= b ? a : b;
+    }
+
+    function min(int256 a, int256 b) internal pure returns (int256) {
+        return a <= b ? a : b;
+    }
+
 }
