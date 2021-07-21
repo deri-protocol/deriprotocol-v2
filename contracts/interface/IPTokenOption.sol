@@ -13,7 +13,7 @@ interface IPTokenOption is IERC721 {
         int256 cost;
         // the last cumulativeFundingRate since last funding settlement for this position
         // the overflow for this value in intended
-        int256 lastCumulativeDiseqFundingRate;
+        int256 lastCumulativeDeltaFundingRate;
         int256 lastCumulativePremiumFundingRate;
     }
 

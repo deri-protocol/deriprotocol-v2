@@ -417,7 +417,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
         positions[index].volume += tradeVolume;
         positions[index].cost += params.curCost - params.realizedCost;
-        positions[index].lastCumulativeDiseqFundingRate = _symbols[symbolId].cumulativeDiseqFundingRate;
+        positions[index].lastCumulativeDeltaFundingRate = _symbols[symbolId].cumulativeDeltaFundingRate;
         positions[index].lastCumulativePremiumFundingRate = _symbols[symbolId].cumulativePremiumFundingRate;
         margin -= params.fee + params.realizedCost;
         positionUpdates[index] = true;
@@ -499,21 +499,21 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         price = s.isCall ? (oraclePrice - s.strikePrice).max(0) : (s.strikePrice - oraclePrice).max(0);
     }
 
-    function _getTimeValuePrice(uint256 symbolId) public view returns (int256) {
+    function _getTimeValuePrice(uint256 symbolId) public view returns (int256, int256) {
         SymbolInfo storage s = _symbols[symbolId];
         int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
         int256 volatility = IVolatilityOracle(s.volatilityAddress).getVolatility().utoi();
-        int256 timeValue = OptionPricer.getEverlastingTimeValue(oraclePrice, s.strikePrice, volatility, _T);
-        return timeValue;
+        (int256 timeValue, int256 delta) = OptionPricer.getEverlastingTimeValueAndDelta(oraclePrice, s.strikePrice, volatility, _T);
+        return (timeValue, delta);
     }
 
 
-    function _getTvMidPrice(uint256 symbolId) public view returns (int256, int256) {
-        int256 timePrice = _getTimeValuePrice(symbolId);
-        if (_liquidity <= 0) return (timePrice, timePrice);
+    function _getTvMidPrice(uint256 symbolId) public view returns (int256, int256, int256) {
+        (int256 timePrice, int256 delta) = _getTimeValuePrice(symbolId);
+        if (_liquidity <= 0) return (timePrice, timePrice, delta);
         SymbolInfo storage s = _symbols[symbolId];
         uint256 midPrice = PmmPricer.getTvMidPrice(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), (_liquidity + s.quote_balance_offset).itou(), s.K);
-        return (timePrice, midPrice.utoi());
+        return (timePrice, midPrice.utoi(), delta);
     }
 
 
@@ -523,21 +523,36 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         tvCost = PmmPricer.queryTradePMM(timePrice.itou(), (s.tradersNetVolume * s.multiplier / ONE), volume, (_liquidity + s.quote_balance_offset).itou(),  s.K);
     }
 
+    struct FundingParams {
+        int256 oraclePrice;
+        int256 ratePerSec1;
+        int256 offset1;
+        int256 ratePerSec2;
+        int256 offset2;
+    }
 
     function _updateSymbolPricesAndFundingRates() internal returns (int256 totalDynamicEquity, int256 totalAbsCost, int256[] memory timePrices) {
         uint256 preTimestamp = _lastTimestamp;
         uint256 curTimestamp = block.timestamp;
         uint256[] memory symbolIds = IPTokenOption(_pTokenAddress).getActiveSymbolIds();
+        int256[] memory deltas = new int256[](symbolIds.length);
         timePrices = new int256[](symbolIds.length);
 
         totalDynamicEquity = _liquidity;
         for (uint256 i = 0; i < symbolIds.length; i++) {
             SymbolInfo storage s = _symbols[symbolIds[i]];
             int256 intrinsicPrice = _getIntrinsicValuePrice(symbolIds[i]);
-            (int256 timePrice, int256 midPrice) = _getTvMidPrice(symbolIds[i]);
+            (int256 timePrice, int256 midPrice, int256 delta) = _getTvMidPrice(symbolIds[i]);
             s.intrinsicValue = intrinsicPrice;
             s.timeValue = midPrice;
             timePrices[i] = timePrice;
+            if (s.isCall && intrinsicPrice > 0) {
+                deltas[i] = delta + ONE ;
+            } else if (!s.isCall && intrinsicPrice > 0) {
+                deltas[i] = delta - ONE;
+            } else {
+                deltas[i] = delta;
+            }
 
             if (s.tradersNetVolume != 0) {
                 int256 cost = s.tradersNetVolume * (intrinsicPrice + midPrice) / ONE * s.multiplier / ONE;
@@ -546,18 +561,19 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             }
         }
 
+        FundingParams memory params;
         if (curTimestamp > preTimestamp && _liquidity > 0) {
             for (uint256 i = 0; i < symbolIds.length; i++) {
                 SymbolInfo storage s = _symbols[symbolIds[i]];
                 if (s.tradersNetVolume != 0) {
-                    int256 oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
-                    int256 ratePerSec1 = s.tradersNetVolume * oraclePrice / ONE * oraclePrice / ONE * s.multiplier / ONE * s.multiplier / ONE * s.diseqFundingCoefficient / totalDynamicEquity;
-                    int256 delta1 = ratePerSec1 * int256(curTimestamp - preTimestamp);
-                    unchecked { s.cumulativeDiseqFundingRate += delta1; }
+                    params.oraclePrice = IOracleViewer(s.oracleAddress).getPrice().utoi();
+                    params.ratePerSec1 = deltas[i] * s.tradersNetVolume / ONE * params.oraclePrice / ONE * params.oraclePrice / ONE * s.multiplier / ONE * s.multiplier / ONE * s.diseqFundingCoefficient / totalDynamicEquity;
+                    params.offset1 = params.ratePerSec1 * int256(curTimestamp - preTimestamp);
+                    unchecked { s.cumulativeDeltaFundingRate += params.offset1; }
 
-                    int256 ratePerSec2 = s.timeValue * s.multiplier / ONE  * _premiumFundingCoefficient / ONE;
-                    int256 delta2 = ratePerSec2 * int256(curTimestamp - preTimestamp);
-                    unchecked { s.cumulativePremiumFundingRate += delta2; }
+                    params.ratePerSec2 = s.timeValue * s.multiplier / ONE  * _premiumFundingCoefficient / ONE;
+                    params.offset2 = params.ratePerSec2 * int256(curTimestamp - preTimestamp);
+                    unchecked { s.cumulativePremiumFundingRate += params.offset2; }
                 }
             }
         }
@@ -608,12 +624,12 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 funding;
         for (uint256 i = 0; i < symbolIds.length; i++) {
             if (positions[i].volume != 0) {
-                int256 cumulativeDiseqFundingRate = _symbols[symbolIds[i]].cumulativeDiseqFundingRate;
+                int256 cumulativeDeltaFundingRate = _symbols[symbolIds[i]].cumulativeDeltaFundingRate;
                 int256 delta;
-                unchecked { delta = cumulativeDiseqFundingRate - positions[i].lastCumulativeDiseqFundingRate; }
+                unchecked { delta = cumulativeDeltaFundingRate - positions[i].lastCumulativeDeltaFundingRate; }
                 funding += positions[i].volume * delta / ONE;
 
-                positions[i].lastCumulativeDiseqFundingRate = cumulativeDiseqFundingRate;
+                positions[i].lastCumulativeDeltaFundingRate = cumulativeDeltaFundingRate;
 
                 int256 cumulativePremiumFundingRate = _symbols[symbolIds[i]].cumulativePremiumFundingRate;
                 unchecked { delta = cumulativePremiumFundingRate - positions[i].lastCumulativePremiumFundingRate; }
