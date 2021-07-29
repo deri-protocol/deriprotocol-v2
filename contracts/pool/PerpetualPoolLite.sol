@@ -21,20 +21,20 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
 
     int256  constant ONE = 10**18;
 
-    uint256 immutable _decimals;
-    int256  immutable _minPoolMarginRatio;
-    int256  immutable _minInitialMarginRatio;
-    int256  immutable _minMaintenanceMarginRatio;
-    int256  immutable _minLiquidationReward;
-    int256  immutable _maxLiquidationReward;
-    int256  immutable _liquidationCutRatio;
-    int256  immutable _protocolFeeCollectRatio;
+    uint256 _decimals;
+    int256  _minPoolMarginRatio;
+    int256  _minInitialMarginRatio;
+    int256  _minMaintenanceMarginRatio;
+    int256  _minLiquidationReward;
+    int256  _maxLiquidationReward;
+    int256  _liquidationCutRatio;
+    int256  _protocolFeeCollectRatio;
 
-    address immutable _bTokenAddress;
-    address immutable _lTokenAddress;
-    address immutable _pTokenAddress;
-    address immutable _liquidatorQualifierAddress;
-    address immutable _protocolFeeCollector;
+    address _bTokenAddress;
+    address _lTokenAddress;
+    address _pTokenAddress;
+    address _liquidatorQualifierAddress;
+    address _protocolFeeCollector;
 
     int256  _liquidity;
 
@@ -54,6 +54,30 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
 
     constructor (uint256[7] memory parameters, address[5] memory addresses) {
         _controller = msg.sender;
+
+        _minPoolMarginRatio = int256(parameters[0]);
+        _minInitialMarginRatio = int256(parameters[1]);
+        _minMaintenanceMarginRatio = int256(parameters[2]);
+        _minLiquidationReward = int256(parameters[3]);
+        _maxLiquidationReward = int256(parameters[4]);
+        _liquidationCutRatio = int256(parameters[5]);
+        _protocolFeeCollectRatio = int256(parameters[6]);
+
+        _bTokenAddress = addresses[0];
+        _lTokenAddress = addresses[1];
+        _pTokenAddress = addresses[2];
+        _liquidatorQualifierAddress = addresses[3];
+        _protocolFeeCollector = addresses[4];
+
+        _decimals = IERC20(addresses[0]).decimals();
+    }
+
+    // to initialize a cloned version of this contract
+    function initialize(address controller_, uint256[7] memory parameters, address[5] memory addresses) external override {
+        require(_bTokenAddress == address(0) && _controller == address(0), 'PerpetualPool: already initialized');
+        require(controller_ != address(0), 'PerpetualPool: invalid controller');
+
+        _controller = controller_;
 
         _minPoolMarginRatio = int256(parameters[0]);
         _minInitialMarginRatio = int256(parameters[1]);
