@@ -42,8 +42,6 @@ interface IPerpetualPoolLite is IMigratable {
 
     event ProtocolFeeCollection(address indexed collector, uint256 amount);
 
-    function initialize(address controller_, uint256[7] memory parameters, address[5] memory addresses) external;
-
     function getParameters() external view returns (
         int256 minPoolMarginRatio,
         int256 minInitialMarginRatio,
