@@ -314,8 +314,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         uint256 bAmount = lShares * totalDynamicEquity.itou() / totalSupply;
 
         _liquidity -= bAmount.utoi();
-        require(
-            minPoolRequiredMargin == 0 || (totalDynamicEquity - bAmount.utoi()) >= minPoolRequiredMargin,
+        require((totalDynamicEquity - bAmount.utoi()) >= minPoolRequiredMargin,
             'pool insuf margin'
         );
         lToken.burn(account, lShares);
@@ -438,7 +437,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _protocolFeeAccrued += params.protocolFee;
         _liquidity += params.fee - params.protocolFee + params.realizedCost;
 
-        require(minPoolRequiredMargin == 0 || totalDynamicEquity >= minPoolRequiredMargin, 'insuf liquidity');
+        require(totalDynamicEquity >= minPoolRequiredMargin, 'insuf liquidity');
 
         (bool initialMarginSafe,) = _getTraderMarginStatus(symbolIds, positions, margin);
         require(initialMarginSafe, 'insuf margin');
