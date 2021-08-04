@@ -15,7 +15,7 @@ interface IEverlastingOption is IMigratable {
         int256  feeRatio;
         int256  strikePrice;
         bool    isCall;
-        int256  diseqFundingCoefficient; // intrisic value
+        int256  deltaFundingCoefficient; // intrisic value
         int256  cumulativeDeltaFundingRate;
         int256  intrinsicValue;
         int256  cumulativePremiumFundingRate;

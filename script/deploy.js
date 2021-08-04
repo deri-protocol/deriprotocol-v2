@@ -83,38 +83,149 @@ async function main() {
 
 
     await pool.addSymbol(
-        0, 'BTCUSD-30000-C',
+        0, 'BTCUSD-20000-C',
+        decimalStr("20000"), // strikePrice
+        true, // isCall
+        oracleBTCUSD.address,
+        volatilityOracleBTC.address,
+        decimalStr("0.01"),
+        decimalStr("0.005"),
+        decimalStr("0.000005"),
+        decimalStr("0.9") // K
+        )
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    await pool.addSymbol(
+        1, 'BTCUSD-30000-C',
         decimalStr("30000"), // strikePrice
         true, // isCall
         oracleBTCUSD.address,
         volatilityOracleBTC.address,
-        decimalStr("0.0001"), decimalStr("0.001"),
-        decimalStr("0.00005"),
-        decimalStr("0.999") // K
+        decimalStr("0.01"),
+        decimalStr("0.005"),
+        decimalStr("0.000005"),
+        decimalStr("0.9") // K
         )
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
-        1, 'BTCUSD-50000-P',
-        decimalStr("50000"), // strikePrice
+        2, 'BTCUSD-40000-C',
+        decimalStr("40000"), // strikePrice
+        true, // isCall
+        oracleBTCUSD.address,
+        volatilityOracleBTC.address,
+        decimalStr("0.01"),
+        decimalStr("0.005"),
+        decimalStr("0.000005"),
+        decimalStr("0.9") // K
+        )
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    await pool.addSymbol(
+        3, 'BTCUSD-20000-P',
+        decimalStr("20000"), // strikePrice
         false, // isCall
         oracleBTCUSD.address,
         volatilityOracleBTC.address,
-        decimalStr("0.0001"), decimalStr("0.001"),
-        decimalStr("0.00005"),
-        decimalStr("0.999") // K
+        decimalStr("0.01"),
+        decimalStr("0.005"),
+        decimalStr("0.000005"),
+        decimalStr("0.9") // K
     )
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
-        2, 'ETHUSD-3000-C',
-        decimalStr("3000"), // strikePrice
+        4, 'BTCUSD-30000-P',
+        decimalStr("30000"), // strikePrice
+        false, // isCall
+        oracleBTCUSD.address,
+        volatilityOracleBTC.address,
+        decimalStr("0.01"),
+        decimalStr("0.005"),
+        decimalStr("0.000005"),
+        decimalStr("0.9") // K
+    )
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    await pool.addSymbol(
+        5, 'BTCUSD-40000-P',
+        decimalStr("40000"), // strikePrice
+        false, // isCall
+        oracleBTCUSD.address,
+        volatilityOracleBTC.address,
+        decimalStr("0.01"),
+        decimalStr("0.005"),
+        decimalStr("0.000005"),
+        decimalStr("0.9") // K
+    )
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    await pool.addSymbol(
+        6, 'ETHUSD-1500-C',
+        decimalStr("1500"), // strikePrice
         true, // isCall
         oracleETHUSD.address,
         volatilityOracleETH.address,
-        decimalStr("0.0001"), decimalStr("0.001"),
-        decimalStr("0.00005"),
-        decimalStr("0.999") // K
+        decimalStr("0.1"),
+        decimalStr("0.005"),
+        decimalStr("0.0000075"),
+        decimalStr("0.9") // K
     )
     await new Promise(resolve => setTimeout(resolve, 2000))
+    await pool.addSymbol(
+        7, 'ETHUSD-2000-C',
+        decimalStr("2000"), // strikePrice
+        true, // isCall
+        oracleETHUSD.address,
+        volatilityOracleETH.address,
+        decimalStr("0.1"),
+        decimalStr("0.005"),
+        decimalStr("0.0000075"),
+        decimalStr("0.9") // K
+    )
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    await pool.addSymbol(
+        8, 'ETHUSD-2500-C',
+        decimalStr("2500"), // strikePrice
+        true, // isCall
+        oracleETHUSD.address,
+        volatilityOracleETH.address,
+        decimalStr("0.1"),
+        decimalStr("0.005"),
+        decimalStr("0.0000075"),
+        decimalStr("0.9") // K
+    )
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    await pool.addSymbol(
+        9, 'ETHUSD-1500-P',
+        decimalStr("1500"), // strikePrice
+        false, // isCall
+        oracleETHUSD.address,
+        volatilityOracleETH.address,
+        decimalStr("0.1"),
+        decimalStr("0.005"),
+        decimalStr("0.0000075"),
+        decimalStr("0.9") // K
+    )
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    await pool.addSymbol(
+        10, 'ETHUSD-2000-P',
+        decimalStr("2000"), // strikePrice
+        false, // isCall
+        oracleETHUSD.address,
+        volatilityOracleETH.address,
+        decimalStr("0.1"),
+        decimalStr("0.005"),
+        decimalStr("0.0000075"),
+        decimalStr("0.9") // K
+    )
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    await pool.addSymbol(
+        11, 'ETHUSD-2500-P',
+        decimalStr("2500"), // strikePrice
+        false, // isCall
+        oracleETHUSD.address,
+        volatilityOracleETH.address,
+        decimalStr("0.1"),
+        decimalStr("0.005"),
+        decimalStr("0.0000075"),
+        decimalStr("0.9") // K
+    )
+
 
     logger.log("oracleBTCUSD", oracleBTCUSD.address)
     logger.log("oracleETHUSD", oracleETHUSD.address)
