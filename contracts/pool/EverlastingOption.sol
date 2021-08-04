@@ -427,6 +427,10 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 //            params.oraclePrice / ONE * params.multiplier / ONE;
         totalAbsCost += params.notionalValue * _dynamicInitialMarginRatio(params.oraclePrice, params.strikePrice, params.isCall) * 10 / ONE;
 
+//        totalAbsCost += params.notionalValue * OptionPricer._dynamicInitialMarginRatio(
+//            _initialMarginRatio, MinInitialMarginRatio,
+//            params.oraclePrice, params.strikePrice, params.isCall) * 10 / ONE;
+
         positions[index].volume += tradeVolume;
         positions[index].cost += params.curCost - params.realizedCost;
         positions[index].lastCumulativeDeltaFundingRate = _symbols[symbolId].cumulativeDeltaFundingRate;
@@ -579,6 +583,10 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 //                totalAbsCost += cost.abs();
                 int256 notionalValue = (s.tradersNetVolume * oraclePrice / ONE * s.multiplier / ONE);
                 totalAbsCost += notionalValue * _dynamicInitialMarginRatio(oraclePrice, s.strikePrice, s.isCall) * 10 / ONE;
+
+//                totalAbsCost += notionalValue * OptionPricer._dynamicInitialMarginRatio(
+//                    _initialMarginRatio, MinInitialMarginRatio,
+//                    oraclePrice, s.strikePrice, s.isCall) * 10 / ONE;
             }
         }
 
