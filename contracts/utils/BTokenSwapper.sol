@@ -54,7 +54,7 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         resultBX = (bx2 - bx1).rescale(decimalsBX, 18);
 
         require(
-            resultBX >= resultB0  * (UONE - maxSlippageRatio) / referencePrice,
+            resultBX * referencePrice >= resultB0  * (UONE - maxSlippageRatio),
             'BTokenSwapper.swapExactB0ForBX: slippage exceeds allowance'
         );
     }
@@ -81,7 +81,7 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         resultBX = amountBX.rescale(decimalsBX, 18);
 
         require(
-            resultB0 >= resultBX * referencePrice / UONE * (UONE - maxSlippageRatio) / UONE,
+            resultB0 * UONE >= resultBX * referencePrice / UONE * (UONE - maxSlippageRatio),
             'BTokenSwapper.swapExactBXForB0: slippage exceeds allowance'
         );
     }
@@ -122,7 +122,7 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         resultBX = (bx2 - bx1).rescale(decimalsBX, 18);
 
         require(
-            resultBX >= resultB0  * (UONE - maxSlippageRatio) / referencePrice,
+            resultBX * referencePrice >= resultB0  * (UONE - maxSlippageRatio),
             'BTokenSwapper.swapB0ForExactBX: slippage exceeds allowance'
         );
     }
@@ -163,7 +163,7 @@ abstract contract BTokenSwapper is IBTokenSwapper {
         resultBX = (bx1 - bx2).rescale(decimalsBX, 18);
 
         require(
-            resultB0 >= resultBX * referencePrice / UONE * (UONE - maxSlippageRatio) / UONE,
+            resultB0 * UONE >= resultBX * referencePrice / UONE * (UONE - maxSlippageRatio),
             'BTokenSwapper.swapBXForExactB0: slippage exceeds allowance'
         );
     }
