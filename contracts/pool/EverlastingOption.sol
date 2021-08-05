@@ -501,8 +501,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         return IOracleViewer(oracleAddress).getPrice().utoi();
     }
 
-
-    function _getTvMidPrice(uint256 symbolId) public view returns (int256, int256, int256) {
+    function getTvMidPrice(uint256 symbolId) public view returns (int256, int256, int256) {
         SymbolInfo storage s = _symbols[symbolId];
         int256 oraclePrice = getOraclePrice(s.oracleAddress);
         int256 volatility = IVolatilityOracle(s.volatilityAddress).getVolatility().utoi();
@@ -510,7 +509,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 midPrice = PmmPricer.getTvMidPrice(timePrice, (s.tradersNetVolume * s.multiplier / ONE), _liquidity + s.quote_balance_offset, s.K);
         return (timePrice, midPrice, delta);
     }
-
 
     function _queryTradePMM(uint256 symbolId, int256 volume, int256 timePrice) internal view returns (int256 tvCost) {
         require(volume != 0, "inv Vol");
@@ -538,7 +536,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             SymbolInfo storage s = _symbols[symbolIds[i]];
             int256 oraclePrice = getOraclePrice(s.oracleAddress);
             int256 intrinsicPrice = s.isCall ? (oraclePrice - s.strikePrice).max(0) : (s.strikePrice - oraclePrice).max(0);
-            (int256 timePrice, int256 midPrice, int256 delta) = _getTvMidPrice(symbolIds[i]);
+            (int256 timePrice, int256 midPrice, int256 delta) = getTvMidPrice(symbolIds[i]);
             s.intrinsicValue = intrinsicPrice;
             s.timeValue = midPrice;
             timePrices[i] = timePrice;
