@@ -13,7 +13,7 @@ import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
 import '../utils/Migratable.sol';
 
-contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
+contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
 
     using SafeMath for uint256;
     using SafeMath for int256;

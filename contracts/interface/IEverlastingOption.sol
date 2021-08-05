@@ -96,7 +96,7 @@ interface IEverlastingOption is IMigratable {
         address volatilityAddress,
         uint256 multiplier,
         uint256 feeRatio,
-        uint256 diseqFundingCoefficient,
+        uint256 deltaFundingCoefficient,
         uint256 k
     ) external;
 
@@ -109,7 +109,7 @@ interface IEverlastingOption is IMigratable {
         address oracleAddress,
         address volatilityAddress,
         uint256 feeRatio,
-        uint256 diseqFundingCoefficient,
+        uint256 deltaFundingCoefficient,
         uint256 k
     ) external;
 
