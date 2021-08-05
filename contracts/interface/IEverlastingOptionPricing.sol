@@ -8,5 +8,4 @@ interface IEverlastingOptionPricing {
 
     function getEverlastingTimeValueAndDelta(int256 S, int256 K, int256 V, int256 T) external pure returns (int256, int256);
 
-
 }

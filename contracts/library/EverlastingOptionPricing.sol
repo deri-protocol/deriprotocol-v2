@@ -277,4 +277,3 @@ contract EverlastingOptionPricing {
     }
 
 }
-

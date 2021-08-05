@@ -60,7 +60,6 @@ interface IEverlastingOption is IMigratable {
     event ProtocolFeeCollection(address indexed collector, uint256 amount);
 
     function getParameters() external view returns (
-//        int256 minPoolMarginRatio,
         int256 minInitialMarginRatio,
         int256 minMaintenanceMarginRatio,
         int256 minLiquidationReward,

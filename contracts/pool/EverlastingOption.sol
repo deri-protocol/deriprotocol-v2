@@ -30,7 +30,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     int256 public _premiumFundingCoefficient = 10**18 / int256(3600*24); // premium funding rate per second
 
     uint256 immutable _decimals;
-//    int256  immutable _minPoolMarginRatio;
     int256  immutable _initialMarginRatio;
     int256  immutable _maintenanceMarginRatio;
     int256  immutable _minLiquidationReward;
@@ -67,7 +66,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         PmmPricer = PMMPricing(pricingAddress);
         OptionPricer = IEverlastingOptionPricing(everlastingPricingOptionAddress);
         _controller = msg.sender;
-//        _minPoolMarginRatio = int256(parameters[0]);
         _initialMarginRatio = int256(parameters[0]);
         _maintenanceMarginRatio = int256(parameters[1]);
         _minLiquidationReward = int256(parameters[2]);
@@ -120,7 +118,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
 
     function getParameters() external override view returns (
-//        int256 minPoolMarginRatio,
         int256 initialMarginRatio,
         int256 maintenanceMarginRatio,
         int256 minLiquidationReward,
@@ -129,7 +126,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 protocolFeeCollectRatio
     ) {
         return (
-//            _minPoolMarginRatio,
             _initialMarginRatio,
             _maintenanceMarginRatio,
             _minLiquidationReward,
@@ -372,7 +368,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 oraclePrice;
         int256 strikePrice;
         bool isCall;
-        int256 deltaNotionalValue;
+        int256 changeOfNotionalValue;
     }
 
     function _trade(address account, uint256 symbolId, int256 tradeVolume) internal _lock_ {
@@ -405,7 +401,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         params.oraclePrice = getOraclePrice(_symbols[symbolId].oracleAddress);
         params.strikePrice = _symbols[symbolId].strikePrice;
         params.isCall = _symbols[symbolId].isCall;
-        params.deltaNotionalValue  = ((params.tradersNetVolume + tradeVolume).abs() - params.tradersNetVolume.abs()) *
+        params.changeOfNotionalValue  = ((params.tradersNetVolume + tradeVolume).abs() - params.tradersNetVolume.abs()) *
             params.oraclePrice / ONE * params.multiplier / ONE;
 
         if (!(positions[index].volume >= 0 && tradeVolume >= 0) && !(positions[index].volume <= 0 && tradeVolume <= 0)) {
@@ -421,7 +417,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         }
 
 
-        minPoolRequiredMargin += params.deltaNotionalValue * _dynamicInitialMarginRatio(params.oraclePrice, params.strikePrice, params.isCall) * 10 / ONE;
+        minPoolRequiredMargin += params.changeOfNotionalValue * _dynamicInitialMarginRatio(params.oraclePrice, params.strikePrice, params.isCall) * 10 / ONE;
 
         positions[index].volume += tradeVolume;
         positions[index].cost += params.curCost - params.realizedCost;
@@ -557,7 +553,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             if (s.tradersNetVolume != 0) {
                 int256 cost = s.tradersNetVolume * (intrinsicPrice + midPrice) / ONE * s.multiplier / ONE;
                 totalDynamicEquity -= cost - s.tradersNetCost;
-//                minPoolRequiredMargin += cost.abs();
                 int256 notionalValue = (s.tradersNetVolume * oraclePrice / ONE * s.multiplier / ONE);
                 minPoolRequiredMargin += notionalValue.abs() * _dynamicInitialMarginRatio(oraclePrice, s.strikePrice, s.isCall) * 10 / ONE;
 
