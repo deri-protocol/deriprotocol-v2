@@ -15,7 +15,7 @@ interface IEverlastingOption is IMigratable {
         int256  feeRatio;
         int256  strikePrice;
         bool    isCall;
-        int256  diseqFundingCoefficient; // intrisic value
+        int256  deltaFundingCoefficient; // intrisic value
         int256  cumulativeDeltaFundingRate;
         int256  intrinsicValue;
         int256  cumulativePremiumFundingRate;
@@ -60,7 +60,6 @@ interface IEverlastingOption is IMigratable {
     event ProtocolFeeCollection(address indexed collector, uint256 amount);
 
     function getParameters() external view returns (
-        int256 minPoolMarginRatio,
         int256 minInitialMarginRatio,
         int256 minMaintenanceMarginRatio,
         int256 minLiquidationReward,
@@ -96,7 +95,7 @@ interface IEverlastingOption is IMigratable {
         address volatilityAddress,
         uint256 multiplier,
         uint256 feeRatio,
-        uint256 diseqFundingCoefficient,
+        uint256 deltaFundingCoefficient,
         uint256 k
     ) external;
 
@@ -109,7 +108,7 @@ interface IEverlastingOption is IMigratable {
         address oracleAddress,
         address volatilityAddress,
         uint256 feeRatio,
-        uint256 diseqFundingCoefficient,
+        uint256 deltaFundingCoefficient,
         uint256 k
     ) external;
 

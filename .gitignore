@@ -15,3 +15,5 @@ hardhat.config.js
 *data*
 *scripts*/
 *temp*
+package-lock.json
+*/.DS_Store

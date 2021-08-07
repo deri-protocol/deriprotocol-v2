@@ -13,7 +13,7 @@ import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
 import '../utils/Migratable.sol';
 
-contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
+contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
 
     using SafeMath for uint256;
     using SafeMath for int256;
@@ -73,7 +73,7 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
     }
 
     // to initialize a cloned version of this contract
-    function initialize(address controller_, uint256[7] memory parameters, address[5] memory addresses) external override {
+    function initialize(address controller_, uint256[7] memory parameters, address[5] memory addresses) external {
         require(_bTokenAddress == address(0) && _controller == address(0), 'PerpetualPool: already initialized');
         require(controller_ != address(0), 'PerpetualPool: invalid controller');
 
