@@ -561,8 +561,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         if (curTimestamp > preTimestamp && _liquidity > 0) {
             for (uint256 i = 0; i < symbolIds.length; i++) {
                 SymbolInfo storage s = _symbols[symbolIds[i]];
+                FundingParams memory params;
                 if (s.tradersNetVolume != 0) {
-                    FundingParams memory params;
                     params.oraclePrice = getOraclePrice(s.oracleAddress);
                     params.ratePerSec1 = deltas[i] * s.tradersNetVolume / ONE * params.oraclePrice / ONE * params.oraclePrice / ONE * s.multiplier / ONE * s.multiplier / ONE * s.deltaFundingCoefficient / totalDynamicEquity;
                     params.offset1 = params.ratePerSec1 * int256(curTimestamp - preTimestamp);
