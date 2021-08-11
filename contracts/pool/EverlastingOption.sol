@@ -567,11 +567,10 @@ contract EverlastingOption is IEverlastingOption, Migratable {
                     params.ratePerSec1 = deltas[i] * s.tradersNetVolume / ONE * params.oraclePrice / ONE * params.oraclePrice / ONE * s.multiplier / ONE * s.multiplier / ONE * s.deltaFundingCoefficient / totalDynamicEquity;
                     params.offset1 = params.ratePerSec1 * int256(curTimestamp - preTimestamp);
                     unchecked { s.cumulativeDeltaFundingRate += params.offset1; }
-
-                    params.ratePerSec2 = s.timeValue * s.multiplier / ONE  * _premiumFundingCoefficient / ONE;
-                    params.offset2 = params.ratePerSec2 * int256(curTimestamp - preTimestamp);
-                    unchecked { s.cumulativePremiumFundingRate += params.offset2; }
                 }
+                params.ratePerSec2 = s.timeValue * s.multiplier / ONE  * _premiumFundingCoefficient / ONE;
+                params.offset2 = params.ratePerSec2 * int256(curTimestamp - preTimestamp);
+                unchecked { s.cumulativePremiumFundingRate += params.offset2; }
             }
         }
         _lastTimestamp = curTimestamp;
