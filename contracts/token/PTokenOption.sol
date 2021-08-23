@@ -155,7 +155,7 @@ contract PTokenOption is IPTokenOption, ERC721 {
         }
 
         _tokenIdPositions[_ownerTokenId[owner]][symbolId] = position;
-        emit UpdatePosition(owner, symbolId, position.volume, position.cost, position.lastCumulativeDeltaFundingRate, position.lastCumulativePremiumFundingRate);
+        emit UpdatePosition(owner, symbolId, position.volume, position.cost, position.lastCumulativePremiumFundingRate);
     }
 
     function mint(address owner) public override _pool_ {

@@ -15,15 +15,13 @@ interface IEverlastingOption is IMigratable {
         int256  feeRatio;
         int256  strikePrice;
         bool    isCall;
-        int256  deltaFundingCoefficient; // intrisic value
-        int256  cumulativeDeltaFundingRate;
         int256  intrinsicValue;
+        int256  optionValue;
         int256  cumulativePremiumFundingRate;
         int256  timeValue;
         int256  tradersNetVolume;
         int256  tradersNetCost;
-        int256  quote_balance_offset;
-        uint256 K;
+        int256 K;
     }
 
     struct SignedPrice {
@@ -53,7 +51,7 @@ interface IEverlastingOption is IMigratable {
 
     event RemoveMargin(address indexed account, uint256 bAmount);
 
-    event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, uint256 intrinsicValue, uint256 timeValue);
+    event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, uint256 intrinsicValue, uint256 optionValue);
 
     event Liquidate(address indexed account, address indexed liquidator, uint256 reward);
 
@@ -95,8 +93,7 @@ interface IEverlastingOption is IMigratable {
         address volatilityAddress,
         uint256 multiplier,
         uint256 feeRatio,
-        uint256 deltaFundingCoefficient,
-        uint256 k
+        int256 k
     ) external;
 
     function removeSymbol(uint256 symbolId) external;
@@ -108,8 +105,7 @@ interface IEverlastingOption is IMigratable {
         address oracleAddress,
         address volatilityAddress,
         uint256 feeRatio,
-        uint256 deltaFundingCoefficient,
-        uint256 k
+        int256 k
     ) external;
 
     function addLiquidity(uint256 bAmount, SignedPrice[] memory volatility) external;
