@@ -15,12 +15,19 @@ interface IEverlastingOption is IMigratable {
         int256  feeRatio;
         int256  strikePrice;
         bool    isCall;
-        int256  intrinsicPrice;
+        int256  intrinsicValue;
         int256  pmmPrice;
         int256  cumulativePremiumFundingRate;
         int256  tradersNetVolume;
         int256  tradersNetCost;
         int256  alpha;
+    }
+
+    struct PriceInfo {
+        int256 underlierPrice;
+        int256 timeValue;
+        int256 intrinsicValue;
+        int256 delta;
     }
 
     struct SignedPrice {
@@ -110,7 +117,6 @@ interface IEverlastingOption is IMigratable {
     function trade(uint256 symbolId, int256 tradeVolume, SignedPrice[] memory volatility) external;
 
     function liquidate(address account, SignedPrice[] memory volatility) external;
-
 
 
 

@@ -66,38 +66,29 @@ async function main() {
 
     // oracleBTCUSD = await ethers.getContractAt("SymbolOracleWoo", "0x78Db6d02EE87260a5D825B31616B5C29f927E430")
     // oracleETHUSD = await ethers.getContractAt("SymbolOracleWoo", "0xdF0050D6A07C19C6F6505d3e66B68c29F41edA09")
-
+    
     oracleBTCUSD_address = "0x18C036Ee25E205c224bD78f10aaf78715a2B6Ff1"
     oracleETHUSD_address = "0x073C99954e1cf5eb6f4Ef6f1B7FF21ACf735Ee6A"
+    volatilityOracleBTC_address = "0x7A4701A1A93BB7692351aEBcD4F5Fab1d4377BBc"
+    volatilityOracleETH_address = "0xF03fDB7193826E11310DE6e297826c4E29E898B9"
+    
 
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    volatilityOracleBTC = await (await ethers.getContractFactory("VolatilityOracleOffChain")).deploy(
-        "VOL-BTCUSD",
-        "0x4C059dD7b01AAECDaA3d2cAf4478f17b9c690080",
-        604800)
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    volatilityOracleETH = await (await ethers.getContractFactory("VolatilityOracleOffChain")).deploy(
-        "VOL-ETHUSD",
-        "0x4C059dD7b01AAECDaA3d2cAf4478f17b9c690080",
-        604800)
-    await new Promise(resolve => setTimeout(resolve, 2000))
-
-    logger.log("volatilityOracleBTC.address", volatilityOracleBTC.address)
-    logger.log("volatilityOracleETH.address", volatilityOracleETH.address)
-
+    logger.log("volatilityOracleBTC_address", volatilityOracleBTC_address)
+    logger.log("volatilityOracleETH_address", volatilityOracleETH_address)
+    console.log("volatilityOracleETH_address", volatilityOracleETH_address)
 
     await pool.addSymbol(
         0, 'BTCUSD-20000-C',
         decimalStr("20000"), // strikePrice
         true, // isCall
         oracleBTCUSD_address,
-        volatilityOracleBTC.address,
+        volatilityOracleBTC_address,
         decimalStr("0.01"),
         decimalStr("0.005"),
-        decimalStr("0.000005"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
         )
 
+    console.log("volatilityOracleETH_address", volatilityOracleETH_address)
 
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
@@ -105,11 +96,10 @@ async function main() {
         decimalStr("30000"), // strikePrice
         true, // isCall
         oracleBTCUSD_address,
-        volatilityOracleBTC.address,
+        volatilityOracleBTC_address,
         decimalStr("0.01"),
         decimalStr("0.005"),
-        decimalStr("0.000005"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
         )
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
@@ -117,11 +107,10 @@ async function main() {
         decimalStr("40000"), // strikePrice
         true, // isCall
         oracleBTCUSD_address,
-        volatilityOracleBTC.address,
+        volatilityOracleBTC_address,
         decimalStr("0.01"),
         decimalStr("0.005"),
-        decimalStr("0.000005"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
         )
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
@@ -129,11 +118,10 @@ async function main() {
         decimalStr("20000"), // strikePrice
         false, // isCall
         oracleBTCUSD_address,
-        volatilityOracleBTC.address,
+        volatilityOracleBTC_address,
         decimalStr("0.01"),
         decimalStr("0.005"),
-        decimalStr("0.000005"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
@@ -141,11 +129,10 @@ async function main() {
         decimalStr("30000"), // strikePrice
         false, // isCall
         oracleBTCUSD_address,
-        volatilityOracleBTC.address,
+        volatilityOracleBTC_address,
         decimalStr("0.01"),
         decimalStr("0.005"),
-        decimalStr("0.000005"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
@@ -153,11 +140,10 @@ async function main() {
         decimalStr("40000"), // strikePrice
         false, // isCall
         oracleBTCUSD_address,
-        volatilityOracleBTC.address,
+        volatilityOracleBTC_address,
         decimalStr("0.01"),
         decimalStr("0.005"),
-        decimalStr("0.000005"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
@@ -165,11 +151,10 @@ async function main() {
         decimalStr("1500"), // strikePrice
         true, // isCall
         oracleETHUSD_address,
-        volatilityOracleETH.address,
+        volatilityOracleETH_address,
         decimalStr("0.1"),
         decimalStr("0.005"),
-        decimalStr("0.0000075"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
@@ -177,11 +162,10 @@ async function main() {
         decimalStr("2000"), // strikePrice
         true, // isCall
         oracleETHUSD_address,
-        volatilityOracleETH.address,
+        volatilityOracleETH_address,
         decimalStr("0.1"),
         decimalStr("0.005"),
-        decimalStr("0.0000075"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
@@ -189,11 +173,10 @@ async function main() {
         decimalStr("2500"), // strikePrice
         true, // isCall
         oracleETHUSD_address,
-        volatilityOracleETH.address,
+        volatilityOracleETH_address,
         decimalStr("0.1"),
         decimalStr("0.005"),
-        decimalStr("0.0000075"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
@@ -201,11 +184,10 @@ async function main() {
         decimalStr("1500"), // strikePrice
         false, // isCall
         oracleETHUSD_address,
-        volatilityOracleETH.address,
+        volatilityOracleETH_address,
         decimalStr("0.1"),
         decimalStr("0.005"),
-        decimalStr("0.0000075"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
@@ -213,11 +195,10 @@ async function main() {
         decimalStr("2000"), // strikePrice
         false, // isCall
         oracleETHUSD_address,
-        volatilityOracleETH.address,
+        volatilityOracleETH_address,
         decimalStr("0.1"),
         decimalStr("0.005"),
-        decimalStr("0.0000075"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
@@ -225,11 +206,10 @@ async function main() {
         decimalStr("2500"), // strikePrice
         false, // isCall
         oracleETHUSD_address,
-        volatilityOracleETH.address,
+        volatilityOracleETH_address,
         decimalStr("0.1"),
         decimalStr("0.005"),
-        decimalStr("0.0000075"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
 
     await new Promise(resolve => setTimeout(resolve, 2000))
@@ -238,11 +218,10 @@ async function main() {
         decimalStr("50000"), // strikePrice
         true, // isCall
         oracleBTCUSD_address,
-        volatilityOracleBTC.address,
+        volatilityOracleBTC_address,
         decimalStr("0.01"),
         decimalStr("0.005"),
-        decimalStr("0.000005"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
 
     await new Promise(resolve => setTimeout(resolve, 2000))
@@ -251,11 +230,10 @@ async function main() {
         decimalStr("60000"), // strikePrice
         true, // isCall
         oracleBTCUSD_address,
-        volatilityOracleBTC.address,
+        volatilityOracleBTC_address,
         decimalStr("0.01"),
         decimalStr("0.005"),
-        decimalStr("0.000005"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
 
 
@@ -265,11 +243,10 @@ async function main() {
         decimalStr("3500"), // strikePrice
         true, // isCall
         oracleETHUSD_address,
-        volatilityOracleETH.address,
+        volatilityOracleETH_address,
         decimalStr("0.1"),
         decimalStr("0.005"),
-        decimalStr("0.0000075"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
 
     await new Promise(resolve => setTimeout(resolve, 2000))
@@ -278,19 +255,18 @@ async function main() {
         decimalStr("4000"), // strikePrice
         true, // isCall
         oracleETHUSD_address,
-        volatilityOracleETH.address,
+        volatilityOracleETH_address,
         decimalStr("0.1"),
         decimalStr("0.005"),
-        decimalStr("0.0000075"),
-        decimalStr("0.5") // K
+        decimalStr("0.01") // K
     )
 
 
 
     logger.log("oracleBTCUSD", oracleBTCUSD_address)
     logger.log("oracleETHUSD", oracleETHUSD_address)
-    logger.log("volatilityOracleBTC", volatilityOracleBTC.address)
-    logger.log("volatilityOracleETH", volatilityOracleETH.address)
+    logger.log("volatilityOracleBTC", volatilityOracleBTC_address)
+    logger.log("volatilityOracleETH", volatilityOracleETH_address)
 
 
 
