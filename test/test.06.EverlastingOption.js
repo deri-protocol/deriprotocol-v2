@@ -79,20 +79,20 @@ describe('DeriV2', function () {
         await lToken.setPool(pool.address)
         await pToken.setPool(pool.address)
 
-        // oracleBTCUSD = await (await ethers.getContractFactory('NaiveOracle')).deploy()
+        oracleBTCUSD = await (await ethers.getContractFactory('NaiveOracle')).deploy()
         // oracleBTCUSDTV1 = await (await ethers.getContractFactory('NaiveOracle')).deploy()
         // oracleBTCUSDTV2 = await (await ethers.getContractFactory('NaiveOracle')).deploy()
-        // oracleETHUSD = await (await ethers.getContractFactory('NaiveOracle')).deploy()
+        oracleETHUSD = await (await ethers.getContractFactory('NaiveOracle')).deploy()
         // oracleETHUSDTV1 = await (await ethers.getContractFactory('NaiveOracle')).deploy()
-        // await oracleBTCUSD.setPrice(decimalStr(40000))
+        await oracleBTCUSD.setPrice(decimalStr(40000))
         // await oracleBTCUSDTV1.setPrice(decimalStr(20))
         // await oracleBTCUSDTV2.setPrice(decimalStr(10))
-        // await oracleETHUSD.setPrice(decimalStr(3000))
+        await oracleETHUSD.setPrice(decimalStr(3500))
         // await oracleETHUSDTV1.setPrice(decimalStr(3))
 
 
-        oracleBTCUSD = await ethers.getContractAt("SymbolOracleWoo", "0x78Db6d02EE87260a5D825B31616B5C29f927E430")
-        oracleETHUSD = await ethers.getContractAt("SymbolOracleWoo", "0xdF0050D6A07C19C6F6505d3e66B68c29F41edA09")
+        // oracleBTCUSD = await ethers.getContractAt("SymbolOracleWoo", "0x78Db6d02EE87260a5D825B31616B5C29f927E430")
+        // oracleETHUSD = await ethers.getContractAt("SymbolOracleWoo", "0xdF0050D6A07C19C6F6505d3e66B68c29F41edA09")
 
         volatilityOracle = await (await ethers.getContractFactory("VolatilityOracleOffChainTest")).deploy("VOLA", deployer.address, 3600*24)
         await volatilityOracle.updateVolatility(0, decimalStr("1"), 0, "0x119bd19fcd094ec8822bae2b1bad7742bb09610a813f613bd04df6bd4a3e2878", "0x119bd19fcd094ec8822bae2b1bad7742bb09610a813f613bd04df6bd4a3e2878")
@@ -120,7 +120,7 @@ describe('DeriV2', function () {
             volatilityOracle.address,
             decimalStr("0.0001"),
             decimalStr("0.001"),
-            decimalStr("1") // K
+            decimalStr("0.04") // K
             )
         console.log(2)
         await pool.addSymbol(
@@ -131,7 +131,7 @@ describe('DeriV2', function () {
             volatilityOracle.address,
             decimalStr("0.0001"),
             decimalStr("0.001"),
-            decimalStr("1") // K
+            decimalStr("0.04") // K
         )
         await pool.addSymbol(
             2, 'ETHUSD-3000-C',
@@ -141,7 +141,7 @@ describe('DeriV2', function () {
             volatilityOracle.address,
             decimalStr("0.0001"),
             decimalStr("0.001"),
-            decimalStr("1") // K
+            decimalStr("0.04") // K
         )
 
         for (account of [deployer, alice, bob]) {
@@ -396,7 +396,7 @@ describe('DeriV2', function () {
         await addMargin(alice, decimalStr(10000), false)
 
         console.log("test1")
-        await trade(alice, 0, decimalStr(10000), false)
+        await trade(alice, 0, decimalStr(10000), true)
         await trade(alice, 0, decimalStr(-10000), true)
 
         console.log('midPrice', await pool.getTvMidPrice(0))

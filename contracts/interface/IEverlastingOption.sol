@@ -21,7 +21,7 @@ interface IEverlastingOption is IMigratable {
         int256  timeValue;
         int256  tradersNetVolume;
         int256  tradersNetCost;
-        int256 K;
+        int256  alpha;
     }
 
     struct SignedPrice {
@@ -93,7 +93,7 @@ interface IEverlastingOption is IMigratable {
         address volatilityAddress,
         uint256 multiplier,
         uint256 feeRatio,
-        int256 k
+        int256  alpha
     ) external;
 
     function removeSymbol(uint256 symbolId) external;
@@ -105,7 +105,7 @@ interface IEverlastingOption is IMigratable {
         address oracleAddress,
         address volatilityAddress,
         uint256 feeRatio,
-        int256 k
+        int256  alpha
     ) external;
 
     function addLiquidity(uint256 bAmount, SignedPrice[] memory volatility) external;

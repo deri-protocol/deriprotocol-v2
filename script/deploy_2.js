@@ -20,8 +20,9 @@ async function main() {
     bob.name = 'bob'
 
     // usdt = await (await ethers.getContractFactory('TERC20')).deploy('Test USDT', 'USDT', 6)
-    usdt = await ethers.getContractAt('TERC20', "0x4405F3131E2659120E4F931146f032B4c05314E2")
-    pricing = await (await ethers.getContractFactory('PMMPricing')).deploy()
+    // BUSD
+    usdt = await ethers.getContractAt('TERC20', "0x2ebE70929bC7D930248040f54135dA12f458690C")
+    pricing = await (await ethers.getContractFactory('LinearPricing')).deploy()
     await new Promise(resolve => setTimeout(resolve, 2000))
     everlastingOptionPricing = await (await ethers.getContractFactory('EverlastingOptionPricing')).deploy()
     await new Promise(resolve => setTimeout(resolve, 2000))
