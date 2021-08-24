@@ -497,7 +497,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         return IOracleViewer(oracleAddress).getPrice().utoi();
     }
 
-    function getMidPrice(uint256 symbolId) public view returns (int256, int256) {
+    function getMidPrice(uint256 symbolId) external view returns (int256, int256) {
         SymbolInfo storage s = _symbols[symbolId];
         int256 oraclePrice = getOraclePrice(s.oracleAddress);
         int256 intrinsicPrice = s.isCall ? (oraclePrice - s.strikePrice).max(0) : (s.strikePrice - oraclePrice).max(0);
@@ -515,7 +515,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         if (_liquidity == 0) {
             K = 0;
         } else {
-            K =((oraclePrice * oraclePrice) / (timePrice + intrinsicPrice)) * delta * s.alpha / _liquidity / ONE;
+            K =((oraclePrice * oraclePrice) / (timePrice + intrinsicPrice)) * delta.abs() * s.alpha / _liquidity / ONE;
         }
 
         int256 pmmPrice = PmmPricer.getMidPrice(timePrice + intrinsicPrice, (s.tradersNetVolume * s.multiplier / ONE), K);
