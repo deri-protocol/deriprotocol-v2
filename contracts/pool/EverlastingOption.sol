@@ -284,7 +284,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     // Core logics
     //================================================================================
     function _addLiquidity(address account, uint256 bAmount) internal _lock_ {
-        (int256 totalDynamicEquity, , ) = _updateSymbolPricesAndFundingRates();
+        (int256 totalDynamicEquity, , ,) = _updateSymbolPricesAndFundingRates();
 
         bAmount = _transferIn(account, bAmount);
         ILTokenOption lToken = ILTokenOption(_lTokenAddress);
@@ -304,7 +304,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     }
 
     function _removeLiquidity(address account, uint256 lShares) internal _lock_ {
-        (int256 totalDynamicEquity, int256 minPoolRequiredMargin, ) = _updateSymbolPricesAndFundingRates();
+        (int256 totalDynamicEquity, int256 minPoolRequiredMargin, ,) = _updateSymbolPricesAndFundingRates();
         ILTokenOption lToken = ILTokenOption(_lTokenAddress);
 
         uint256 totalSupply = lToken.totalSupply();
@@ -357,6 +357,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
     // struct for temp use in trade function, to prevent stack too deep error
     struct TradeParams {
+        uint256 index;
         int256 tradersNetVolume;
         int256 intrinsicValue;
         int256 optionValue;
@@ -372,25 +373,24 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     }
 
     function _trade(address account, uint256 symbolId, int256 tradeVolume) internal _lock_ {
-        (int256 totalDynamicEquity, int256 minPoolRequiredMargin, int256[] memory optionPrices) = _updateSymbolPricesAndFundingRates();
+
+        (int256 totalDynamicEquity, int256 minPoolRequiredMargin, int256[] memory optionPrices, int256[] memory Ks) = _updateSymbolPricesAndFundingRates();
+
 
         (uint256[] memory symbolIds,
          IPTokenOption.Position[] memory positions,
          bool[] memory positionUpdates,
          int256 margin) = _settleTraderFundingFee(account);
 
-        uint256 index;
+        TradeParams memory params;
         for (uint256 i = 0; i < symbolIds.length; i++) {
             if (symbolId == symbolIds[i]) {
-                index = i;
+                params.index = i;
                 break;
             }
         }
 
-        TradeParams memory params;
-
-        params.curCost = _queryTradePMM(symbolId, tradeVolume * _symbols[symbolId].multiplier / ONE, optionPrices[index]);
-
+        params.curCost = _queryTradePMM(symbolId, tradeVolume * _symbols[symbolId].multiplier / ONE, optionPrices[params.index], Ks[params.index]);
         params.tradersNetVolume = _symbols[symbolId].tradersNetVolume;
         params.intrinsicValue = _symbols[symbolId].intrinsicValue;
         params.optionValue = _symbols[symbolId].optionValue;
@@ -403,25 +403,23 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         params.changeOfNotionalValue  = ((params.tradersNetVolume + tradeVolume).abs() - params.tradersNetVolume.abs()) *
             params.oraclePrice / ONE * params.multiplier / ONE;
 
-        if (!(positions[index].volume >= 0 && tradeVolume >= 0) && !(positions[index].volume <= 0 && tradeVolume <= 0)) {
-            int256 absVolume = positions[index].volume.abs();
+        if (!(positions[params.index].volume >= 0 && tradeVolume >= 0) && !(positions[params.index].volume <= 0 && tradeVolume <= 0)) {
+            int256 absVolume = positions[params.index].volume.abs();
             int256 absTradeVolume = tradeVolume.abs();
             if (absVolume <= absTradeVolume) {
                 // previous position is totally closed
-                params.realizedCost = params.curCost * absVolume / absTradeVolume + positions[index].cost;
+                params.realizedCost = params.curCost * absVolume / absTradeVolume + positions[params.index].cost;
             } else {
                 // previous position is partially closed
-                params.realizedCost = positions[index].cost * absTradeVolume / absVolume + params.curCost;
+                params.realizedCost = positions[params.index].cost * absTradeVolume / absVolume + params.curCost;
             }
         }
 
-        minPoolRequiredMargin += params.changeOfNotionalValue * _dynamicInitialMarginRatio(params.oraclePrice, params.strikePrice, params.isCall) * 10 / ONE;
-
-        positions[index].volume += tradeVolume;
-        positions[index].cost += params.curCost - params.realizedCost;
-        positions[index].lastCumulativePremiumFundingRate = _symbols[symbolId].cumulativePremiumFundingRate;
+        positions[params.index].volume += tradeVolume;
+        positions[params.index].cost += params.curCost - params.realizedCost;
+        positions[params.index].lastCumulativePremiumFundingRate = _symbols[symbolId].cumulativePremiumFundingRate;
         margin -= params.fee + params.realizedCost;
-        positionUpdates[index] = true;
+        positionUpdates[params.index] = true;
 
         _symbols[symbolId].tradersNetVolume += tradeVolume;
         _symbols[symbolId].tradersNetCost += params.curCost - params.realizedCost;
@@ -429,17 +427,21 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         params.protocolFee = params.fee * _protocolFeeCollectRatio / ONE;
         _protocolFeeAccrued += params.protocolFee;
         _liquidity += params.fee - params.protocolFee + params.realizedCost;
-        require(totalDynamicEquity >= minPoolRequiredMargin, 'insuf liquidity');
 
-        (bool initialMarginSafe,) = _getTraderMarginStatus(symbolIds, positions, margin);
-        require(initialMarginSafe, 'insuf margin');
+
+        {
+            minPoolRequiredMargin += params.changeOfNotionalValue * _dynamicInitialMarginRatio(params.oraclePrice, params.strikePrice, params.isCall) * 10 / ONE;
+            require(totalDynamicEquity >= minPoolRequiredMargin, 'insuf liquidity');
+            (bool initialMarginSafe,) = _getTraderMarginStatus(symbolIds, positions, margin);
+            require(initialMarginSafe, 'insuf margin');
+        }
         _updateTraderPortfolio(account, symbolIds, positions, positionUpdates, margin);
 
         emit Trade(account, symbolId, tradeVolume, params.intrinsicValue.itou(), params.optionValue.itou());
     }
 
     function _liquidate(address liquidator, address account) internal _lock_ {
-        ( , , int256[] memory optionPrices) = _updateSymbolPricesAndFundingRates();
+        ( , , int256[] memory optionPrices, int256[] memory Ks) = _updateSymbolPricesAndFundingRates();
 
         (uint256[] memory symbolIds, IPTokenOption.Position[] memory positions, , int256 margin) = _settleTraderFundingFee(account);
 
@@ -450,7 +452,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 netEquity = margin;
         for (uint256 i = 0; i < symbolIds.length; i++) {
             if (positions[i].volume != 0) {
-                int256 curCost = _queryTradePMM(symbolIds[i], -positions[i].volume * _symbols[symbolIds[i]].multiplier / ONE, optionPrices[i]);
+                int256 curCost = _queryTradePMM(symbolIds[i], -positions[i].volume * _symbols[symbolIds[i]].multiplier / ONE, optionPrices[i], Ks[i]);
                 _symbols[symbolIds[i]].tradersNetVolume -= positions[i].volume;
                 _symbols[symbolIds[i]].tradersNetCost -= positions[i].cost;
                 netEquity -= curCost + positions[i].cost;
@@ -520,11 +522,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         return (timePrice + intrinsicPrice, midPrice);
     }
 
-    function _queryTradePMM(uint256 symbolId, int256 volume, int256 optionPrice) internal view returns (int256 cost) {
-        require(volume != 0, "inv Vol");
+    function _getTvMidPrice(uint256 symbolId, int256 oraclePrice, int256 intrinsicPrice) internal view returns (int256, int256, int256) {
         SymbolInfo storage s = _symbols[symbolId];
-        int256 oraclePrice = getOraclePrice(s.oracleAddress);
-        int256 intrinsicPrice = s.isCall ? (oraclePrice - s.strikePrice).max(0) : (s.strikePrice - oraclePrice).max(0);
         int256 volatility = IVolatilityOracle(s.volatilityAddress).getVolatility().utoi();
         (int256 timePrice, int256 delta) = OptionPricer.getEverlastingTimeValueAndDelta(oraclePrice, s.strikePrice, volatility, _T);
         if (s.isCall && intrinsicPrice > 0) {
@@ -538,9 +537,15 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         if (_liquidity == 0) {
             K = 0;
         } else {
-            K =((oraclePrice * oraclePrice) / (timePrice + intrinsicPrice)) * delta * s.alpha / _liquidity / ONE;
+            K =((oraclePrice * oraclePrice) / (timePrice + intrinsicPrice)) * delta.abs() * s.alpha / _liquidity / ONE;
         }
+        int256 midPrice = PmmPricer.getTvMidPrice(timePrice + intrinsicPrice, (s.tradersNetVolume * s.multiplier / ONE), K);
+        return (timePrice + intrinsicPrice, midPrice, K);
+    }
 
+    function _queryTradePMM(uint256 symbolId, int256 volume, int256 optionPrice, int256 K) internal view returns (int256 cost) {
+        require(volume != 0, "inv Vol");
+        SymbolInfo storage s = _symbols[symbolId];
         cost = PmmPricer.queryTradePMM(optionPrice, (s.tradersNetVolume * s.multiplier / ONE), volume, K);
     }
 
@@ -549,21 +554,22 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 offset2;
     }
 
-    function _updateSymbolPricesAndFundingRates() internal returns (int256 totalDynamicEquity, int256 minPoolRequiredMargin, int256[] memory optionPrices) {
+    function _updateSymbolPricesAndFundingRates() internal returns (int256 totalDynamicEquity, int256 minPoolRequiredMargin, int256[] memory optionPrices, int256[] memory Ks) {
         uint256 preTimestamp = _lastTimestamp;
         uint256 curTimestamp = block.timestamp;
         uint256[] memory symbolIds = IPTokenOption(_pTokenAddress).getActiveSymbolIds();
-//        int256[] memory deltas = new int256[](symbolIds.length);
         optionPrices = new int256[](symbolIds.length);
+        Ks = new int256[](symbolIds.length);
         totalDynamicEquity = _liquidity;
         for (uint256 i = 0; i < symbolIds.length; i++) {
             SymbolInfo storage s = _symbols[symbolIds[i]];
             int256 oraclePrice = getOraclePrice(s.oracleAddress);
             int256 intrinsicPrice = s.isCall ? (oraclePrice - s.strikePrice).max(0) : (s.strikePrice - oraclePrice).max(0);
-            (int256 optionPrice, int256 midPrice) = getTvMidPrice(symbolIds[i]);
+            (int256 optionPrice, int256 midPrice, int256 K) = _getTvMidPrice(symbolIds[i], oraclePrice, intrinsicPrice);
             s.intrinsicValue = intrinsicPrice;
             s.optionValue = midPrice;
             optionPrices[i] = optionPrice;
+            Ks[i] = K;
 
             if (s.tradersNetVolume != 0) {
                 int256 cost = s.tradersNetVolume *  midPrice / ONE * s.multiplier / ONE;
