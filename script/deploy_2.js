@@ -101,6 +101,7 @@ async function main() {
         decimalStr("0.005"),
         decimalStr("0.01") // K
         )
+    console.log("addSymbol 0 ")
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
         2, 'BTCUSD-40000-C',
@@ -112,6 +113,7 @@ async function main() {
         decimalStr("0.005"),
         decimalStr("0.01") // K
         )
+    console.log("addSymbol 1 ")
     await new Promise(resolve => setTimeout(resolve, 2000))
     await pool.addSymbol(
         3, 'BTCUSD-20000-P',
