@@ -428,13 +428,11 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _protocolFeeAccrued += params.protocolFee;
         _liquidity += params.fee - params.protocolFee + params.realizedCost;
 
+        minPoolRequiredMargin += params.changeOfNotionalValue * _dynamicInitialMarginRatio(params.oraclePrice, params.strikePrice, params.isCall) * 10 / ONE;
+        require(totalDynamicEquity >= minPoolRequiredMargin, 'insuf liquidity');
+        (bool initialMarginSafe,) = _getTraderMarginStatus(symbolIds, positions, margin);
+        require(initialMarginSafe, 'insuf margin');
 
-        {
-            minPoolRequiredMargin += params.changeOfNotionalValue * _dynamicInitialMarginRatio(params.oraclePrice, params.strikePrice, params.isCall) * 10 / ONE;
-            require(totalDynamicEquity >= minPoolRequiredMargin, 'insuf liquidity');
-            (bool initialMarginSafe,) = _getTraderMarginStatus(symbolIds, positions, margin);
-            require(initialMarginSafe, 'insuf margin');
-        }
         _updateTraderPortfolio(account, symbolIds, positions, positionUpdates, margin);
 
         emit Trade(account, symbolId, tradeVolume, params.intrinsicPrice.itou(), params.pmmPrice.itou());
