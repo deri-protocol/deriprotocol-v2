@@ -549,10 +549,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         cost = PmmPricer.queryTradePMM(basePrice, (s.tradersNetVolume * s.multiplier / ONE), volume, K);
     }
 
-    struct FundingParams {
-        int256 ratePerSec2;
-        int256 offset2;
-    }
 
     function _updateSymbolPricesAndFundingRates() internal returns (int256 totalDynamicEquity, int256 minPoolRequiredMargin, int256[] memory basePrices, int256[] memory Ks) {
         uint256 preTimestamp = _lastTimestamp;
@@ -565,11 +561,11 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             SymbolInfo storage s = _symbols[symbolIds[i]];
             int256 oraclePrice = getOraclePrice(s.oracleAddress);
             int256 intrinsicPrice = s.isCall ? (oraclePrice - s.strikePrice).max(0) : (s.strikePrice - oraclePrice).max(0);
-            (int256 basePrice, int256 pmmPrice, int256 K) = _getMidPrice(symbolIds[i], oraclePrice, intrinsicPrice);
             s.intrinsicPrice = intrinsicPrice;
-            s.pmmPrice = pmmPrice;
+            (int256 basePrice, int256 pmmPrice, int256 K) = _getMidPrice(symbolIds[i], oraclePrice, intrinsicPrice);
             basePrices[i] = basePrice;
             Ks[i] = K;
+            s.pmmPrice = pmmPrice;
 
             if (s.tradersNetVolume != 0) {
                 int256 cost = s.tradersNetVolume *  pmmPrice / ONE * s.multiplier / ONE;
@@ -577,16 +573,15 @@ contract EverlastingOption is IEverlastingOption, Migratable {
                 int256 notionalValue = (s.tradersNetVolume * oraclePrice / ONE * s.multiplier / ONE);
                 minPoolRequiredMargin += notionalValue.abs() * _dynamicInitialMarginRatio(oraclePrice, s.strikePrice, s.isCall) * 10 / ONE;
             }
-
         }
+
         if (curTimestamp > preTimestamp && _liquidity > 0) {
             for (uint256 i = 0; i < symbolIds.length; i++) {
                 SymbolInfo storage s = _symbols[symbolIds[i]];
-                FundingParams memory params;
-                // ratePerSec2 may be negative in some case
-                params.ratePerSec2 = (s.pmmPrice - s.intrinsicPrice) * s.multiplier / ONE  * _premiumFundingCoefficient / ONE;
-                params.offset2 = params.ratePerSec2 * int256(curTimestamp - preTimestamp);
-                unchecked { s.cumulativePremiumFundingRate += params.offset2; }
+                // ratePerSec may be negative in some case
+                int256 ratePerSec = (s.pmmPrice - s.intrinsicPrice) * s.multiplier / ONE  * _premiumFundingCoefficient / ONE;
+                int256 offset = ratePerSec * int256(curTimestamp - preTimestamp);
+                unchecked { s.cumulativePremiumFundingRate += offset; }
             }
         }
         _lastTimestamp = curTimestamp;
@@ -682,7 +677,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             return dynInitialMarginRatio;
         }
     }
-
 
     function _transferIn(address from, uint256 bAmount) internal returns (uint256) {
         IERC20 bToken = IERC20(_bTokenAddress);
