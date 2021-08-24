@@ -15,10 +15,9 @@ interface IEverlastingOption is IMigratable {
         int256  feeRatio;
         int256  strikePrice;
         bool    isCall;
-        int256  intrinsicValue;
-        int256  optionValue;
+        int256  intrinsicPrice;
+        int256  pmmPrice;
         int256  cumulativePremiumFundingRate;
-        int256  timeValue;
         int256  tradersNetVolume;
         int256  tradersNetCost;
         int256  alpha;
@@ -33,15 +32,7 @@ interface IEverlastingOption is IMigratable {
         bytes32 s;
     }
 
-    enum Side {FLAT, SHORT, LONG} // POOL STATUS 例如LONG代表池子LONG, 此时池子的baseBalance > baseTarget
 
-    struct VirtualBalance {
-        uint256 baseTarget;
-        uint256 baseBalance;
-        uint256 quoteTarget;
-        uint256 quoteBalance;
-        Side newSide;
-    }
 
     event AddLiquidity(address indexed account, uint256 lShares, uint256 bAmount);
 

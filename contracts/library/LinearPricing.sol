@@ -18,12 +18,12 @@ contract LinearPricing {
 
     int256 constant ONE = 10**18;
 
-    function getTvMidPrice(int256 timePrice, int256 deltaB, int256 K) external view returns (int256) {
+    function getMidPrice(int256 timePrice, int256 deltaB, int256 K) external pure returns (int256) {
         int256 midPrice = timePrice * (ONE + K * deltaB / ONE) / ONE;
         return midPrice;
     }
 
-    function queryTradePMM(int256 timePrice, int256 deltaB, int256 volume, int256 K) external view returns (int256) {
+    function queryTradePMM(int256 timePrice, int256 deltaB, int256 volume, int256 K) external pure returns (int256) {
         int256 r = volume + (K / 2) * ((deltaB + volume)**2 - deltaB**2) / ONE / ONE;
         return timePrice * r / ONE;
     }

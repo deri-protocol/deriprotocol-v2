@@ -182,24 +182,24 @@ describe('DeriV2', function () {
             },
             symbol0: {
                 symbol: symbol0.symbol,
-                intrinsicValue: symbol0.intrinsicValue,
-                optionValue: symbol0.optionValue,
+                intrinsicPrice: symbol0.intrinsicPrice,
+                pmmPrice: symbol0.pmmPrice,
                 cumulativePremiumFundingRate: symbol0.cumulativePremiumFundingRate,
                 tradersNetVolume: symbol0.tradersNetVolume,
                 tradersNetCost: symbol0.tradersNetCost
             },
             symbol1: {
                 symbol: symbol1.symbol,
-                intrinsicValue: symbol1.intrinsicValue,
-                optionValue: symbol1.optionValue,
+                intrinsicPrice: symbol1.intrinsicPrice,
+                pmmPrice: symbol1.pmmPrice,
                 cumulativePremiumFundingRate: symbol1.cumulativePremiumFundingRate,
                 tradersNetVolume: symbol1.tradersNetVolume,
                 tradersNetCost: symbol1.tradersNetCost
             },
             symbol2: {
                 symbol: symbol2.symbol,
-                intrinsicValue: symbol2.intrinsicValue,
-                optionValue: symbol2.optionValue,
+                intrinsicPrice: symbol2.intrinsicPrice,
+                pmmPrice: symbol2.pmmPrice,
                 cumulativePremiumFundingRate: symbol2.cumulativePremiumFundingRate,
                 tradersNetVolume: symbol2.tradersNetVolume,
                 tradersNetCost: symbol2.tradersNetCost
@@ -399,7 +399,7 @@ describe('DeriV2', function () {
         await trade(alice, 0, decimalStr(10000), true)
         await trade(alice, 0, decimalStr(-10000), true)
 
-        console.log('midPrice', await pool.getTvMidPrice(0))
+        console.log('midPrice', await pool.getMidPrice(0))
         // console.log("test2")
         // await trade(alice, 0, decimalStr("-100"), false)
         // // expect((await pToken.getPosition(bob.address, 0)).cost).to.equal("10020006668889629876640")
