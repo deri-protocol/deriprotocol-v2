@@ -49,7 +49,7 @@ interface IEverlastingOption is IMigratable {
 
     event RemoveMargin(address indexed account, uint256 bAmount);
 
-    event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, uint256 intrinsicValue, uint256 optionValue);
+    event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, uint256 intrinsicValue, uint256 avgPrice);
 
     event Liquidate(address indexed account, address indexed liquidator, uint256 reward);
 
