@@ -310,6 +310,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
         (int256 totalDynamicEquityNext, ) = _liquidityChange(-(bAmount.utoi()));
         uint256 comp = (totalDynamicEquity.itou() - totalDynamicEquityNext.itou()) * lShares / totalSupply;
+        console.log('comp', comp);
         bAmount -= comp;
         _liquidity -= bAmount.utoi();
         require((totalDynamicEquityNext - bAmount.utoi()) >= minPoolRequiredMargin,
@@ -558,9 +559,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         cost = PmmPricer.queryTradePMM((s.tradersNetVolume * s.multiplier / ONE), theoreticalPrice, volume, K);
     }
 
-    function _liquidityChange(int256 deltaLiquidity) internal returns (int256 totalDynamicEquity, int256 minPoolRequiredMargin) {
-        uint256 preTimestamp = _lastTimestamp;
-        uint256 curTimestamp = block.timestamp;
+    function _liquidityChange(int256 deltaLiquidity) internal returns (int256 totalDynamicEquity) {
         uint256[] memory symbolIds = IPTokenOption(_pTokenAddress).getActiveSymbolIds();
         totalDynamicEquity = _liquidity;
 
@@ -574,8 +573,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             if (s.tradersNetVolume != 0) {
                 int256 cost = s.tradersNetVolume *  pmmPrice / ONE * s.multiplier / ONE;
                 totalDynamicEquity -= cost - s.tradersNetCost;
-                int256 notionalValue = (s.tradersNetVolume * underlierPrice / ONE * s.multiplier / ONE);
-                minPoolRequiredMargin += notionalValue.abs() * _dynamicInitialMarginRatio(underlierPrice, s.strikePrice, s.isCall) * 10 / ONE;
             }
         }
     }
