@@ -30,6 +30,15 @@ interface IEverlastingOption is IMigratable {
         int256 delta;
     }
 
+
+    struct PriceI{
+        int256 underlierPrices;
+        int256 intrinsicValues;
+        int256 theoreticalPrices;
+        int256 pmmPrices;
+        int256 Ks;
+    }
+
     struct SignedPrice {
         uint256 symbolId;
         uint256 timestamp;
