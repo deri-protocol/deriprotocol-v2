@@ -362,8 +362,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     // struct for temp use in trade function, to prevent stack too deep error
     struct TradeParams {
         uint256 index;
-        int256 tradersNetRealVolume;
-        int256 traderRealVolume;
+        int256 tradersNetPosition;
+        int256 volume;
         int256 avgPrice;
         int256 multiplier;
         int256 curCost;
@@ -391,23 +391,22 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             }
         }
 
-        params.tradersNetRealVolume = _symbols[symbolId].tradersNetVolume * _symbols[symbolId].multiplier / ONE;
-        params.traderRealVolume = tradeVolume * _symbols[symbolId].multiplier / ONE;
-        {
-            params.curCost = PmmPricer.queryTradePMM(
-                params.tradersNetRealVolume,
+        params.tradersNetPosition = _symbols[symbolId].tradersNetVolume * _symbols[symbolId].multiplier / ONE;
+        params.volume = tradeVolume * _symbols[symbolId].multiplier / ONE;
+        params.curCost = PmmPricer.queryTradePMM(
+                params.tradersNetPosition,
                 priceInfos[params.index].theoreticalPrice,
-                params.traderRealVolume,
+                params.volume,
                 priceInfos[params.index].K
-            );
-        }
+        );
+
 
         params.avgPrice = params.curCost * ONE / tradeVolume;
         params.multiplier = _symbols[symbolId].multiplier;
         params.fee = params.curCost.abs() * _symbols[symbolId].feeRatio / ONE;
         params.strikePrice = _symbols[symbolId].strikePrice;
         params.isCall = _symbols[symbolId].isCall;
-        params.changeOfNotionalValue  = ((params.tradersNetRealVolume + params.traderRealVolume).abs() - params.tradersNetRealVolume.abs()) *
+        params.changeOfNotionalValue  = ((params.tradersNetPosition + params.volume).abs() - params.tradersNetPosition.abs()) *
             priceInfos[params.index].underlierPrice / ONE;
 
         if (!(positions[params.index].volume >= 0 && tradeVolume >= 0) && !(positions[params.index].volume <= 0 && tradeVolume <= 0)) {
