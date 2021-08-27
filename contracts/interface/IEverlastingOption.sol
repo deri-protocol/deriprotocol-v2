@@ -32,11 +32,11 @@ interface IEverlastingOption is IMigratable {
 
 
     struct PriceI{
-        int256 underlierPrices;
-        int256 intrinsicValues;
-        int256 theoreticalPrices;
-        int256 pmmPrices;
-        int256 Ks;
+        int256 underlierPrice;
+        int256 intrinsicValue;
+        int256 theoreticalPrice;
+        int256 pmmPrice;
+        int256 K;
     }
 
     struct SignedPrice {
@@ -83,13 +83,15 @@ interface IEverlastingOption is IMigratable {
 
     function getSymbol(uint256 symbolId) external view returns (SymbolInfo memory);
 
-    function getLiquidity() external view returns (int256);
-
-    function getLastTimestamp() external view returns (uint256);
-
-    function getProtocolFeeAccrued() external view returns (int256);
+//    function getLiquidity() external view returns (int256);
+//
+//    function getLastTimestamp() external view returns (uint256);
+//
+//    function getProtocolFeeAccrued() external view returns (int256);
 
     function collectProtocolFee() external;
+
+    function getPoolStateValues() external view returns (int256, uint256, int256);
 
     function addSymbol(
         uint256 symbolId,

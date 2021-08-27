@@ -177,8 +177,8 @@ describe('DeriV2', function () {
                 numPositionHolders0: (await pToken.getNumPositionHolders(0)).toString(),
                 numPositionHolders1: (await pToken.getNumPositionHolders(1)).toString(),
                 numPositionHolders2: (await pToken.getNumPositionHolders(2)).toString(),
-                liquidity: await pool.getLiquidity(),
-                protocolFeeAccrued: await pool.getProtocolFeeAccrued()
+                liquidity: (await pool.getPoolStateValues())[0],
+                protocolFeeAccrued: (await pool.getPoolStateValues())[2]
             },
             symbol0: {
                 symbol: symbol0.symbol,
