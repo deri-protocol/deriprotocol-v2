@@ -9,46 +9,26 @@ interface IEverlastingOption is IMigratable {
     struct SymbolInfo {
         uint256 symbolId;
         string  symbol;
-        address oracleAddress; // spot price oracle
-        address volatilityAddress; // iv oracle
+        address oracleAddress;
+        address volatilityAddress;
+        bool    isCall;
+        int256  strikePrice;
         int256  multiplier;
         int256  feeRatio;
-        int256  strikePrice;
-        bool    isCall;
-        int256  intrinsicValue;
-        int256  pmmPrice;
-        int256  cumulativePremiumFundingRate;
+        int256  alpha;
         int256  tradersNetVolume;
         int256  tradersNetCost;
-        int256  alpha;
+        int256  cumulativePremiumFundingRate;
     }
 
-    struct PriceInfo {
-        int256 underlierPrice;
-        int256 timeValue;
-        int256 intrinsicValue;
-        int256 delta;
-    }
-
-
-    struct PriceI{
-        int256 underlierPrice;
-        int256 intrinsicValue;
-        int256 theoreticalPrice;
-        int256 pmmPrice;
-        int256 K;
-    }
-
-    struct SignedPrice {
+    struct SignedValue {
         uint256 symbolId;
         uint256 timestamp;
-        uint256 price;
+        uint256 value;
         uint8   v;
         bytes32 r;
         bytes32 s;
     }
-
-
 
     event AddLiquidity(address indexed account, uint256 lShares, uint256 bAmount);
 
@@ -58,7 +38,7 @@ interface IEverlastingOption is IMigratable {
 
     event RemoveMargin(address indexed account, uint256 bAmount);
 
-    event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, uint256 intrinsicValue, uint256 avgPrice);
+    event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, int256 tradeCost);
 
     event Liquidate(address indexed account, address indexed liquidator, uint256 reward);
 
@@ -78,31 +58,26 @@ interface IEverlastingOption is IMigratable {
         address lTokenAddress,
         address pTokenAddress,
         address liquidatorQualifierAddress,
-        address protocolFeeCollector
+        address protocolFeeCollector,
+        address optionPricerAddress
     );
 
     function getSymbol(uint256 symbolId) external view returns (SymbolInfo memory);
 
-//    function getLiquidity() external view returns (int256);
-//
-//    function getLastTimestamp() external view returns (uint256);
-//
-//    function getProtocolFeeAccrued() external view returns (int256);
+    function getPoolStateValues() external view returns (int256 liquidity, uint256 lastTimestamp, int256 protocolFeeAccrued);
 
     function collectProtocolFee() external;
-
-    function getPoolStateValues() external view returns (int256, uint256, int256);
 
     function addSymbol(
         uint256 symbolId,
         string  memory symbol,
-        uint256 strikePrice,
-        bool    isCall,
         address oracleAddress,
         address volatilityAddress,
+        bool    isCall,
+        uint256 strikePrice,
         uint256 multiplier,
         uint256 feeRatio,
-        int256  alpha
+        uint256 alpha
     ) external;
 
     function removeSymbol(uint256 symbolId) external;
@@ -114,21 +89,19 @@ interface IEverlastingOption is IMigratable {
         address oracleAddress,
         address volatilityAddress,
         uint256 feeRatio,
-        int256  alpha
+        uint256 alpha
     ) external;
 
-    function addLiquidity(uint256 bAmount, SignedPrice[] memory volatility) external;
+    function addLiquidity(uint256 bAmount, SignedValue[] memory volatilities) external;
 
-    function removeLiquidity(uint256 lShares, SignedPrice[] memory volatility) external;
+    function removeLiquidity(uint256 lShares, SignedValue[] memory volatilities) external;
 
     function addMargin(uint256 bAmount) external;
 
-    function removeMargin(uint256 bAmount, SignedPrice[] memory volatility) external;
+    function removeMargin(uint256 bAmount, SignedValue[] memory volatilities) external;
 
-    function trade(uint256 symbolId, int256 tradeVolume, SignedPrice[] memory volatility) external;
+    function trade(uint256 symbolId, int256 tradeVolume, SignedValue[] memory volatilities) external;
 
-    function liquidate(address account, SignedPrice[] memory volatility) external;
-
-
+    function liquidate(address account, SignedValue[] memory volatilities) external;
 
 }
