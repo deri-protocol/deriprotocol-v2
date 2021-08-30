@@ -370,9 +370,10 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         p.volume += tradeVolume;
         p.cost += toAddCost;
         p.lastCumulativePremiumFundingRate = s.cumulativePremiumFundingRate;
-        margin -= fee + realizedCost;
-        s.positionUpdated = true;
 
+        margin -= fee + realizedCost;
+
+        s.positionUpdated = true;
         s.tradersNetVolume += tradeVolume;
         s.tradersNetCost += toAddCost;
         s.tradersNetPosition = s.tradersNetVolume * s.multiplier / ONE;
