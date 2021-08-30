@@ -389,18 +389,15 @@ describe('DeriV2', function () {
     it('trade/liquidate work correctly', async function () {
         console.log(3)
         await addLiquidity(deployer, decimalStr(50000), true)
-        // console.log(4)
-        // // await addMargin(deployer, decimalStr(5000), false)
-        // await addMargin(alice, decimalStr(10000), false)
-        // await trade(alice, 0, decimalStr(100), true)
-        // console.log("test1")
-        // await addLiquidity(bob, decimalStr(50000), true)
-        // await removeLiquidity(bob, decimalStr(50000), true)
+        console.log(4)
+        // await addMargin(deployer, decimalStr(5000), false)
+        await addMargin(alice, decimalStr(10000), false)
+        await trade(alice, 0, decimalStr(100), true)
+        console.log("test1")
+        await addLiquidity(bob, decimalStr(50000), true)
+        await removeLiquidity(bob, decimalStr(50000), true)
 
 
-        // await trade(alice, 0, decimalStr(-10000), true)
-
-        // await removeMargin(alice, decimalStr(9900), true)
 
         // console.log('midPrice', await pool.getMidPrice(0))
         // console.log("test2")

@@ -62,13 +62,19 @@ async function main() {
     await pToken.setPool(pool.address)
     await new Promise(resolve => setTimeout(resolve, 2000))
 
-    // oracleBTCUSD = await ethers.getContractAt("SymbolOracleWoo", "0x78Db6d02EE87260a5D825B31616B5C29f927E430")
-    // oracleETHUSD = await ethers.getContractAt("SymbolOracleWoo", "0xdF0050D6A07C19C6F6505d3e66B68c29F41edA09")
-    
     oracleBTCUSD_address = "0x18C036Ee25E205c224bD78f10aaf78715a2B6Ff1"
     oracleETHUSD_address = "0x073C99954e1cf5eb6f4Ef6f1B7FF21ACf735Ee6A"
     volatilityOracleBTC_address = "0x7A4701A1A93BB7692351aEBcD4F5Fab1d4377BBc"
     volatilityOracleETH_address = "0xF03fDB7193826E11310DE6e297826c4E29E898B9"
+
+    volatilityOracleBTC = await (await ethers.getContractFactory('VolatilityOracleOffChain')).deploy(
+        'VOL-BTCUSD', '0x4C059dD7b01AAECDaA3d2cAf4478f17b9c690080', 300
+    )
+    volatilityOracleBTC_address = volatilityOracleBTC.address
+    volatilityOracleETH = await (await ethers.getContractFactory('VolatilityOracleOffChain')).deploy(
+        'VOL-ETHUSD', '0x4C059dD7b01AAECDaA3d2cAf4478f17b9c690080', 300
+    )
+    volatilityOracleETH_address = volatilityOracleETH.address
     
 
     logger.log("volatilityOracleBTC_address", volatilityOracleBTC_address)
@@ -131,7 +137,7 @@ async function main() {
 
 
 
-    logger.log("aa")
+    logger.log("finished")
     // for (account of [deployer, alice, bob]) {
     //     await usdt.mint(account.address, decimalStr(100000))
     //     await usdt.connect(account).approve(pool.address, MAX)
