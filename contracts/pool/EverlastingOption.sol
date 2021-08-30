@@ -375,6 +375,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
         s.tradersNetVolume += tradeVolume;
         s.tradersNetCost += toAddCost;
+        s.tradersNetPosition = s.tradersNetVolume * s.multiplier / ONE;
+
         _symbols[symbolId].tradersNetVolume += tradeVolume;
         _symbols[symbolId].tradersNetCost += toAddCost;
 
@@ -534,9 +536,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 tradersNetPosition,
         int256 liquidity
     ) internal pure returns (int256 K, int256 dpmmPrice) {
-        if (liquidity > 0) {
-            K = spotPrice ** 2 / theoreticalPrice * delta.abs() * alpha / liquidity / ONE;
-        }
+        K = spotPrice ** 2 / theoreticalPrice * delta.abs() * alpha / liquidity / ONE;
         dpmmPrice = theoreticalPrice * (ONE + K * tradersNetPosition / ONE) / ONE;
     }
 
