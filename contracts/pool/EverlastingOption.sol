@@ -510,7 +510,10 @@ contract EverlastingOption is IEverlastingOption, Migratable {
                 s.spotPrice, s.strikePrice, s.volatility, FUNDING_PERIOD
             );
             s.theoreticalPrice = s.intrinsicValue + s.timeValue;
-            if (s.intrinsicValue > 0) {
+            if (s.spotPrice == s.strikePrice) {
+                s.delta = ONE / 2;
+            }
+            else if (s.intrinsicValue > 0) {
                 if (s.isCall) s.delta += ONE;
                 else s.delta -= ONE;
             }
