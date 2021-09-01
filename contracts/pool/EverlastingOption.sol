@@ -22,8 +22,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
     int256 constant ONE = 1e18;
     int256 constant MIN_INITIAL_MARGIN_RATIO = 1e16;       // 0.01
-    int256 constant FUNDING_PERIOD = ONE / 365;            // premium funding period = 1 day
-    int256 constant FUNDING_COEFFICIENT = ONE / 24 / 3600; // premium funding rate per second
+    int256 constant FUNDING_PERIOD = ONE / 365;            // funding period = 1 day
+    int256 constant FUNDING_COEFFICIENT = ONE / 24 / 3600; // funding rate per second
 
     uint256 immutable _decimals;
     int256  immutable _initialMarginRatio;
@@ -39,6 +39,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     address immutable _liquidatorQualifierAddress;
     address immutable _protocolFeeCollector;
     address immutable _optionPricerAddress;
+
+    int256  _poolMarginMultiplier = 10;
 
     int256  _liquidity;
     uint256 _lastTimestamp;
@@ -193,6 +195,14 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         IPTokenOption(_pTokenAddress).toggleCloseOnly(symbolId);
     }
 
+    function getPoolMarginMultiplier() external override view returns (int256) {
+        return _poolMarginMultiplier;
+    }
+
+    function setPoolMarginMulitplier(uint256 multiplier) external override _controller_ {
+        _poolMarginMultiplier = int256(multiplier);
+    }
+
     function setSymbolParameters(
         uint256 symbolId,
         address oracleAddress,
@@ -228,16 +238,20 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     }
 
     function removeMargin(uint256 bAmount, SignedValue[] memory volatilities) external override {
+        address account = msg.sender;
         require(bAmount > 0, '0 bAmount');
+        require(IPTokenOption(_pTokenAddress).exists(account), 'no pToken');
         _updateSymbolVolatilities(volatilities);
-        _removeMargin(msg.sender, bAmount);
+        _removeMargin(account, bAmount);
     }
 
     function trade(uint256 symbolId, int256 tradeVolume, SignedValue[] memory volatilities) external override {
+        address account = msg.sender;
         require(IPTokenOption(_pTokenAddress).isActiveSymbolId(symbolId), 'inv symbolId');
+        require(IPTokenOption(_pTokenAddress).exists(account), 'no pToken');
         require(tradeVolume != 0 && tradeVolume / ONE * ONE == tradeVolume, 'inv volume');
         _updateSymbolVolatilities(volatilities);
-        _trade(msg.sender, symbolId, tradeVolume);
+        _trade(account, symbolId, tradeVolume);
     }
 
     function liquidate(address account, SignedValue[] memory volatilities) external override {
@@ -246,6 +260,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             _liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(_liquidatorQualifierAddress).isQualifiedLiquidator(liquidator),
             'unqualified'
         );
+        require(IPTokenOption(_pTokenAddress).exists(account), 'no pToken');
         _updateSymbolVolatilities(volatilities);
         _liquidate(liquidator, account);
     }
@@ -369,7 +384,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
         p.volume += tradeVolume;
         p.cost += toAddCost;
-        p.lastCumulativePremiumFundingRate = s.cumulativePremiumFundingRate;
+        p.lastCumulativeFundingRate = s.cumulativeFundingRate;
 
         margin -= fee + realizedCost;
 
@@ -469,7 +484,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256  K;
         int256  tradersNetVolume;
         int256  tradersNetCost;
-        int256  cumulativePremiumFundingRate;
+        int256  cumulativeFundingRate;
         int256  tradersNetPosition; // volume * multiplier
         int256  dynamicInitialMarginRatio;
         bool    positionUpdated;
@@ -520,7 +535,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             s.alpha = ss.alpha;
             s.tradersNetVolume = ss.tradersNetVolume;
             s.tradersNetCost = ss.tradersNetCost;
-            s.cumulativePremiumFundingRate = ss.cumulativePremiumFundingRate;
+            s.cumulativeFundingRate = ss.cumulativeFundingRate;
             s.tradersNetPosition = s.tradersNetVolume * s.multiplier / ONE;
             (s.K, s.dpmmPrice) = _calculateDpmmPrice(s.spotPrice, s.theoreticalPrice, s.delta, s.alpha, s.tradersNetPosition, liquidity);
             if (s.intrinsicValue > 0 || s.spotPrice == s.strikePrice) {
@@ -553,8 +568,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
                 DataSymbol memory s = symbols[i];
                 int256 ratePerSecond = (s.dpmmPrice - s.intrinsicValue) * s.multiplier / ONE * FUNDING_COEFFICIENT / ONE;
                 int256 diff = ratePerSecond * int256(curTimestamp - preTimestamp);
-                unchecked { s.cumulativePremiumFundingRate += diff; }
-                _symbols[s.symbolId].cumulativePremiumFundingRate = s.cumulativePremiumFundingRate;
+                unchecked { s.cumulativeFundingRate += diff; }
+                _symbols[s.symbolId].cumulativeFundingRate = s.cumulativeFundingRate;
             }
         }
         _lastTimestamp = curTimestamp;
@@ -568,12 +583,13 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         }
     }
 
-    function _getPoolRequiredMargin(DataSymbol[] memory symbols) internal pure returns (int256 poolRequiredMargin) {
+    function _getPoolRequiredMargin(DataSymbol[] memory symbols) internal view returns (int256 poolRequiredMargin) {
+        int256 poolMarginMultiplier = _poolMarginMultiplier;
         for (uint256 i = 0; i < symbols.length; i++) {
             DataSymbol memory s = symbols[i];
             int256 notional = s.tradersNetPosition * s.spotPrice / ONE;
             // pool margin requirement is 10x trader margin requirement
-            poolRequiredMargin += notional.abs() * s.dynamicInitialMarginRatio * 10 / ONE;
+            poolRequiredMargin += notional.abs() * s.dynamicInitialMarginRatio * poolMarginMultiplier / ONE;
         }
     }
 
@@ -589,9 +605,9 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             IPTokenOption.Position memory p = pToken.getPosition(account, symbols[i].symbolId);
             if (p.volume != 0) {
                 int256 diff;
-                unchecked { diff = symbols[i].cumulativePremiumFundingRate - p.lastCumulativePremiumFundingRate; }
+                unchecked { diff = symbols[i].cumulativeFundingRate - p.lastCumulativeFundingRate; }
                 funding += p.volume * diff / ONE;
-                p.lastCumulativePremiumFundingRate = symbols[i].cumulativePremiumFundingRate;
+                p.lastCumulativeFundingRate = symbols[i].cumulativeFundingRate;
                 symbols[i].positionUpdated = true;
                 positions[i] = p;
             }

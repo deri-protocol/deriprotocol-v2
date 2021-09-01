@@ -18,7 +18,7 @@ interface IEverlastingOption is IMigratable {
         int256  alpha;
         int256  tradersNetVolume;
         int256  tradersNetCost;
-        int256  cumulativePremiumFundingRate;
+        int256  cumulativeFundingRate;
     }
 
     struct SignedValue {
@@ -83,6 +83,10 @@ interface IEverlastingOption is IMigratable {
     function removeSymbol(uint256 symbolId) external;
 
     function toggleCloseOnly(uint256 symbolId) external;
+
+    function getPoolMarginMultiplier() external view returns (int256);
+
+    function setPoolMarginMulitplier(uint256 multiplier) external;
 
     function setSymbolParameters(
         uint256 symbolId,
