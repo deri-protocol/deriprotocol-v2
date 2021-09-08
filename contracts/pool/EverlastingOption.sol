@@ -10,6 +10,7 @@ import '../interface/IOracleViewer.sol';
 import '../interface/IVolatilityOracle.sol';
 import '../interface/ILiquidatorQualifier.sol';
 import "../interface/IEverlastingOption.sol";
+import "../interface/IEverlastingOptionOld.sol";
 import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
 import '../utils/Migratable.sol';
@@ -89,8 +90,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
     // during a migration, this function is intended to be called in the target pool
     function executeMigration(address source) external override _controller_ {
-        uint256 migrationTimestamp_ = IEverlastingOption(source).migrationTimestamp();
-        address migrationDestination_ = IEverlastingOption(source).migrationDestination();
+        uint256 migrationTimestamp_ = IEverlastingOptionOld(source).migrationTimestamp();
+        address migrationDestination_ = IEverlastingOptionOld(source).migrationDestination();
         require(migrationTimestamp_ != 0 && block.timestamp >= migrationTimestamp_, 'time inv');
         require(migrationDestination_ == address(this), 'not dest');
 
@@ -100,11 +101,26 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         // transfer symbol infos
         uint256[] memory symbolIds = IPTokenOption(_pTokenAddress).getActiveSymbolIds();
         for (uint256 i = 0; i < symbolIds.length; i++) {
-            _symbols[symbolIds[i]] = IEverlastingOption(source).getSymbol(symbolIds[i]);
+            uint256 symbolId = symbolIds[i];
+            IEverlastingOptionOld.SymbolInfo memory pre = IEverlastingOptionOld(source).getSymbol(symbolId);
+            SymbolInfo storage cur = _symbols[symbolId];
+            cur.symbolId = pre.symbolId;
+            cur.symbol = pre.symbol;
+            cur.oracleAddress = pre.oracleAddress;
+            cur.volatilityAddress = pre.volatilityAddress;
+            cur.isCall = pre.isCall;
+            cur.strikePrice = pre.strikePrice;
+            cur.multiplier = pre.multiplier;
+            cur.feeRatioITM = ONE * 15 / 10000;
+            cur.feeRatioOTM = ONE * 4 / 100;
+            cur.alpha = pre.alpha;
+            cur.tradersNetVolume = pre.tradersNetVolume;
+            cur.tradersNetCost = pre.tradersNetCost;
+            cur.cumulativeFundingRate = pre.cumulativeFundingRate;
         }
 
         // transfer state values
-        (_liquidity, _lastTimestamp, _protocolFeeAccrued) = IEverlastingOption(source).getPoolStateValues();
+        (_liquidity, _lastTimestamp, _protocolFeeAccrued) = IEverlastingOptionOld(source).getPoolStateValues();
 
         emit ExecuteMigration(migrationTimestamp_, source, migrationDestination_);
     }
@@ -170,7 +186,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         bool    isCall,
         uint256 strikePrice,
         uint256 multiplier,
-        uint256 feeRatio,
+        uint256 feeRatioITM,
+        uint256 feeRatioOTM,
         uint256 alpha
     ) external override _controller_ {
         SymbolInfo storage s = _symbols[symbolId];
@@ -181,7 +198,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         s.isCall = isCall;
         s.strikePrice = int256(strikePrice);
         s.multiplier = int256(multiplier);
-        s.feeRatio = int256(feeRatio);
+        s.feeRatioITM = int256(feeRatioITM);
+        s.feeRatioOTM = int256(feeRatioOTM);
         s.alpha = int256(alpha);
         IPTokenOption(_pTokenAddress).addSymbolId(symbolId);
     }
@@ -207,13 +225,15 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         uint256 symbolId,
         address oracleAddress,
         address volatilityAddress,
-        uint256 feeRatio,
+        uint256 feeRatioITM,
+        uint256 feeRatioOTM,
         uint256 alpha
     ) external override _controller_ {
         SymbolInfo storage s = _symbols[symbolId];
         s.oracleAddress = oracleAddress;
         s.volatilityAddress = volatilityAddress;
-        s.feeRatio = int256(feeRatio);
+        s.feeRatioITM = int256(feeRatioITM);
+        s.feeRatioOTM = int256(feeRatioOTM);
         s.alpha = int256(alpha);
     }
 
@@ -366,7 +386,15 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             tradeVolume * s.multiplier / ONE,
             s.K
         );
-        int256 fee = curCost.abs() * s.feeRatio / ONE;
+
+        emit Trade(account, symbolId, tradeVolume, curCost, _liquidity, s.tradersNetVolume, s.spotPrice, s.volatility);
+
+        int256 fee;
+        if (s.intrinsicValue > 0) {
+            fee = s.spotPrice * tradeVolume.abs() / ONE * s.multiplier / ONE * s.feeRatioITM / ONE;
+        } else {
+            fee = curCost.abs() * s.feeRatioOTM / ONE;
+        }
 
         int256 realizedCost;
         if (!(p.volume >= 0 && tradeVolume >= 0) && !(p.volume <= 0 && tradeVolume <= 0)) {
@@ -406,7 +434,6 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
         _updateTraderPortfolio(account, symbols, positions, margin);
 
-        emit Trade(account, symbolId, tradeVolume, curCost);
     }
 
     function _liquidate(address liquidator, address account) internal _lock_ {
@@ -471,7 +498,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         uint256 symbolId;
         bool    isCall;
         int256  multiplier;
-        int256  feeRatio;
+        int256  feeRatioITM;
+        int256  feeRatioOTM;
         int256  strikePrice;
         int256  spotPrice;
         int256  volatility;
@@ -516,7 +544,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             s.symbolId = symbolIds[i];
             s.isCall = ss.isCall;
             s.multiplier = ss.multiplier;
-            s.feeRatio = ss.feeRatio;
+            s.feeRatioITM = ss.feeRatioITM;
+            s.feeRatioOTM = ss.feeRatioOTM;
             s.strikePrice = ss.strikePrice;
             s.spotPrice = IOracleViewer(ss.oracleAddress).getPrice().utoi();
             s.volatility = IVolatilityOracle(ss.volatilityAddress).getVolatility().utoi();

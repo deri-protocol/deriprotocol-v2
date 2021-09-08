@@ -14,7 +14,8 @@ interface IEverlastingOption is IMigratable {
         bool    isCall;
         int256  strikePrice;
         int256  multiplier;
-        int256  feeRatio;
+        int256  feeRatioITM;
+        int256  feeRatioOTM;
         int256  alpha;
         int256  tradersNetVolume;
         int256  tradersNetCost;
@@ -38,7 +39,8 @@ interface IEverlastingOption is IMigratable {
 
     event RemoveMargin(address indexed account, uint256 bAmount);
 
-    event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, int256 tradeCost);
+    event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, int256 tradeCost,
+                int256 liquidity, int256 tradersNetVolume, int256 spotPrice, int256 volatility);
 
     event Liquidate(address indexed account, address indexed liquidator, uint256 reward);
 
@@ -76,7 +78,8 @@ interface IEverlastingOption is IMigratable {
         bool    isCall,
         uint256 strikePrice,
         uint256 multiplier,
-        uint256 feeRatio,
+        uint256 feeRatioITM,
+        uint256 feeRatioOTM,
         uint256 alpha
     ) external;
 
@@ -92,7 +95,8 @@ interface IEverlastingOption is IMigratable {
         uint256 symbolId,
         address oracleAddress,
         address volatilityAddress,
-        uint256 feeRatio,
+        uint256 feeRatioITM,
+        uint256 feeRatioOTM,
         uint256 alpha
     ) external;
 
