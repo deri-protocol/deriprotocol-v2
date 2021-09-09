@@ -13,13 +13,12 @@ interface IPTokenOption is IERC721 {
         int256 cost;
         // the last cumulativeFundingRate since last funding settlement for this position
         // the overflow for this value in intended
-        int256 lastCumulativeDeltaFundingRate;
-        int256 lastCumulativePremiumFundingRate;
+        int256 lastCumulativeFundingRate;
     }
 
     event UpdateMargin(address indexed owner, int256 amount);
 
-    event UpdatePosition(address indexed owner, uint256 indexed symbolId, int256 volume, int256 cost, int256 lastCumulativeDiseqFundingRate, int256 lastCumulativeFundingRate2);
+    event UpdatePosition(address indexed owner, uint256 indexed symbolId, int256 volume, int256 cost, int256 lastCumulativeFundingRate);
 
     function name() external view returns (string memory);
 
