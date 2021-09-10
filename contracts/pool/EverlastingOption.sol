@@ -559,7 +559,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
                 else s.delta -= ONE;
             }
             else if (s.spotPrice == s.strikePrice) {
-                s.delta = ONE / 2;
+                if (s.isCall) s.delta = ONE / 2;
+                else s.delta = -ONE / 2;
             }
             s.alpha = ss.alpha;
             s.tradersNetVolume = ss.tradersNetVolume;
