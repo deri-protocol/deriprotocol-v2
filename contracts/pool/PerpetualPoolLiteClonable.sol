@@ -21,7 +21,6 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
     using SafeERC20 for IERC20;
 
     int256  constant ONE = 10**18;
-    int256 constant FUNDING_COEFFICIENT = ONE / 24 / 3600; // funding rate per second
 
     uint256 _decimals;
     int256  _poolMarginRatio;
@@ -37,6 +36,9 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
     address _pTokenAddress;
     address _liquidatorQualifierAddress;
     address _protocolFeeCollector;
+
+    // funding period in seconds, funding collected for each volume during this period will be (dpmmPrice - indexPrice)
+    int256  _fundingPeriod = 3 * 24 * 3600;
 
     int256  _liquidity;
     uint256 _lastTimestamp;
@@ -158,6 +160,14 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         _protocolFeeAccrued -= amount.utoi();
         _transferOut(_protocolFeeCollector, amount);
         emit ProtocolFeeCollection(_protocolFeeCollector, amount);
+    }
+
+    function getFundingPeriod() external view override returns (int256) {
+        return _fundingPeriod;
+    }
+
+    function setFundingPeriod(uint256 period) external override _controller_ {
+        _fundingPeriod = int256(period);
     }
 
     function addSymbol(
@@ -314,6 +324,7 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         DataSymbol[] memory symbols = _updateFundingRates(type(uint256).max);
         (IPTokenLite.Position[] memory positions, int256 margin) = _settleTraderFundingFee(account, symbols);
 
+        // remove all available margin when bAmount >= margin
         int256 amount = bAmount.utoi();
         if (amount > margin) {
             amount = margin;
@@ -505,9 +516,10 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         uint256 curTimestamp = block.timestamp;
         symbols = _getSymbols(tradeSymbolId);
         if (curTimestamp > preTimestamp) {
+            int256 fundingPeriod = _fundingPeriod;
             for (uint256 i = 0; i < symbols.length; i++) {
                 DataSymbol memory s = symbols[i];
-                int256 ratePerSecond = (s.dpmmPrice - s.indexPrice) * s.multiplier / ONE * FUNDING_COEFFICIENT / ONE;
+                int256 ratePerSecond = (s.dpmmPrice - s.indexPrice) * s.multiplier / ONE / fundingPeriod;
                 int256 diff = ratePerSecond * int256(curTimestamp - preTimestamp);
                 unchecked { s.cumulativeFundingRate += diff; }
                 _symbols[s.symbolId].cumulativeFundingRate = s.cumulativeFundingRate;

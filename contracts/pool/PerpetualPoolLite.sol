@@ -2,6 +2,7 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
+import '../interface/IPerpetualPoolLiteOld.sol';
 import '../interface/IPerpetualPoolLite.sol';
 import '../interface/ILTokenLite.sol';
 import '../interface/IPTokenLite.sol';
@@ -21,7 +22,6 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
     using SafeERC20 for IERC20;
 
     int256  constant ONE = 10**18;
-    int256 constant FUNDING_COEFFICIENT = ONE / 24 / 3600; // funding rate per second
 
     uint256 immutable _decimals;
     int256  immutable _poolMarginRatio;
@@ -37,6 +37,9 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
     address immutable _pTokenAddress;
     address immutable _liquidatorQualifierAddress;
     address immutable _protocolFeeCollector;
+
+    // funding period in seconds, funding collected for each volume during this period will be (dpmmPrice - indexPrice)
+    int256  _fundingPeriod = 3 * 24 * 3600;
 
     int256  _liquidity;
     uint256 _lastTimestamp;
@@ -84,9 +87,13 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
     }
 
     // during a migration, this function is intended to be called in the target pool
-    function executeMigration(address source) external override _controller_ {
-        uint256 migrationTimestamp_ = IPerpetualPoolLite(source).migrationTimestamp();
-        address migrationDestination_ = IPerpetualPoolLite(source).migrationDestination();
+    // the original `executeMigration` is just a place holder, instead `executeMigrationSwitchToTimestamp` will be executed during migration
+    // in order to change the funding calculation from blocks to timestamp
+    function executeMigration(address source) external override _controller_ {}
+
+    function executeMigrationSwitchToTimestamp(address source, uint256 lastBlockNumber, uint256 lastBlockTimestamp) external _controller_ {
+        uint256 migrationTimestamp_ = IPerpetualPoolLiteOld(source).migrationTimestamp();
+        address migrationDestination_ = IPerpetualPoolLiteOld(source).migrationDestination();
 
         // transfer bToken to this address
         IERC20(_bTokenAddress).safeTransferFrom(source, address(this), IERC20(_bTokenAddress).balanceOf(source));
@@ -94,11 +101,26 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
         // transfer symbol infos
         uint256[] memory symbolIds = IPTokenLite(_pTokenAddress).getActiveSymbolIds();
         for (uint256 i = 0; i < symbolIds.length; i++) {
-            _symbols[symbolIds[i]] = IPerpetualPoolLite(source).getSymbol(symbolIds[i]);
+            uint256 symbolId = symbolIds[i];
+            IPerpetualPoolLiteOld.SymbolInfo memory pre = IPerpetualPoolLiteOld(source).getSymbol(symbolId);
+            SymbolInfo memory cur = _symbols[symbolId];
+            cur.symbolId = pre.symbolId;
+            cur.symbol = pre.symbol;
+            cur.oracleAddress = pre.oracleAddress;
+            cur.multiplier = pre.multiplier;
+            cur.feeRatio = pre.feeRatio;
+            cur.alpha = ONE * 3 / 10;
+            cur.tradersNetVolume = pre.tradersNetVolume;
+            cur.tradersNetCost = pre.tradersNetCost;
+            cur.cumulativeFundingRate = pre.cumulativeFundingRate;
         }
 
         // transfer state values
-        (_liquidity, _lastTimestamp, _protocolFeeAccrued) = IPerpetualPoolLite(source).getPoolStateValues();
+        _liquidity = IPerpetualPoolLiteOld(source).getLiquidity();
+        _protocolFeeAccrued = IPerpetualPoolLiteOld(source).getProtocolFeeAccrued();
+
+        require(IPerpetualPoolLiteOld(source).getLastUpdateBlock() == lastBlockNumber, 'lastBlock mismatch');
+        _lastTimestamp = lastBlockTimestamp;
 
         emit ExecuteMigration(migrationTimestamp_, source, migrationDestination_);
     }
@@ -154,6 +176,14 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
         _protocolFeeAccrued -= amount.utoi();
         _transferOut(_protocolFeeCollector, amount);
         emit ProtocolFeeCollection(_protocolFeeCollector, amount);
+    }
+
+    function getFundingPeriod() external view override returns (int256) {
+        return _fundingPeriod;
+    }
+
+    function setFundingPeriod(uint256 period) external override _controller_ {
+        _fundingPeriod = int256(period);
     }
 
     function addSymbol(
@@ -310,6 +340,7 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
         DataSymbol[] memory symbols = _updateFundingRates(type(uint256).max);
         (IPTokenLite.Position[] memory positions, int256 margin) = _settleTraderFundingFee(account, symbols);
 
+        // remove all available margin when bAmount >= margin
         int256 amount = bAmount.utoi();
         if (amount > margin) {
             amount = margin;
@@ -501,9 +532,10 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
         uint256 curTimestamp = block.timestamp;
         symbols = _getSymbols(tradeSymbolId);
         if (curTimestamp > preTimestamp) {
+            int256 fundingPeriod = _fundingPeriod;
             for (uint256 i = 0; i < symbols.length; i++) {
                 DataSymbol memory s = symbols[i];
-                int256 ratePerSecond = (s.dpmmPrice - s.indexPrice) * s.multiplier / ONE * FUNDING_COEFFICIENT / ONE;
+                int256 ratePerSecond = (s.dpmmPrice - s.indexPrice) * s.multiplier / ONE / fundingPeriod;
                 int256 diff = ratePerSecond * int256(curTimestamp - preTimestamp);
                 unchecked { s.cumulativeFundingRate += diff; }
                 _symbols[s.symbolId].cumulativeFundingRate = s.cumulativeFundingRate;
