@@ -39,7 +39,7 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
     address immutable _protocolFeeCollector;
 
     // funding period in seconds, funding collected for each volume during this period will be (dpmmPrice - indexPrice)
-    int256  _fundingPeriod = 3 * 24 * 3600;
+    int256  _fundingPeriod = 3 * 24 * 3600 * ONE;
 
     int256  _liquidity;
     uint256 _lastTimestamp;
@@ -535,7 +535,7 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
             int256 fundingPeriod = _fundingPeriod;
             for (uint256 i = 0; i < symbols.length; i++) {
                 DataSymbol memory s = symbols[i];
-                int256 ratePerSecond = (s.dpmmPrice - s.indexPrice) * s.multiplier / ONE / fundingPeriod;
+                int256 ratePerSecond = (s.dpmmPrice - s.indexPrice) * s.multiplier / fundingPeriod;
                 int256 diff = ratePerSecond * int256(curTimestamp - preTimestamp);
                 unchecked { s.cumulativeFundingRate += diff; }
                 _symbols[s.symbolId].cumulativeFundingRate = s.cumulativeFundingRate;

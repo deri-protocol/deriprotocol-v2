@@ -10,7 +10,6 @@ interface IPerpetualPool {
         address oracleAddress;
         uint256 decimals;
         int256  discount;
-        int256  price;
         int256  liquidity;
         int256  pnl;
         int256  cumulativePnl;
@@ -21,24 +20,24 @@ interface IPerpetualPool {
         address oracleAddress;
         int256  multiplier;
         int256  feeRatio;
-        int256  fundingRateCoefficient;
-        int256  price;
-        int256  cumulativeFundingRate;
+        int256  alpha;
+        int256  distributedUnrealizedPnl;
         int256  tradersNetVolume;
         int256  tradersNetCost;
+        int256  cumulativeFundingRate;
     }
 
-    event AddLiquidity(address indexed owner, uint256 indexed bTokenId, uint256 bAmount);
+    event AddLiquidity(address indexed lp, uint256 indexed bTokenId, uint256 bAmount);
 
-    event RemoveLiquidity(address indexed owner, uint256 indexed bTokenId, uint256 bAmount);
+    event RemoveLiquidity(address indexed lp, uint256 indexed bTokenId, uint256 bAmount);
 
-    event AddMargin(address indexed owner, uint256 indexed bTokenId, uint256 bAmount);
+    event AddMargin(address indexed trader, uint256 indexed bTokenId, uint256 bAmount);
 
-    event RemoveMargin(address indexed owner, uint256 indexed bTokenId, uint256 bAmount);
+    event RemoveMargin(address indexed trader, uint256 indexed bTokenId, uint256 bAmount);
 
-    event Trade(address indexed owner, uint256 indexed symbolId, int256 tradeVolume, uint256 price);
+    event Trade(address indexed trader, uint256 indexed symbolId, int256 tradeVolume, int256 tradeCost);
 
-    event Liquidate(address indexed owner, address indexed liquidator, uint256 reward);
+    event Liquidate(address indexed trader, address indexed liquidator, uint256 reward);
 
     event ProtocolFeeCollection(address indexed collector, uint256 amount);
 
@@ -46,8 +45,8 @@ interface IPerpetualPool {
         uint256 decimals0,
         int256  minBToken0Ratio,
         int256  minPoolMarginRatio,
-        int256  minInitialMarginRatio,
-        int256  minMaintenanceMarginRatio,
+        int256  initialMarginRatio,
+        int256  maintenanceMarginRatio,
         int256  minLiquidationReward,
         int256  maxLiquidationReward,
         int256  liquidationCutRatio,
@@ -67,13 +66,9 @@ interface IPerpetualPool {
 
     function getSymbol(uint256 symbolId) external view returns (SymbolInfo memory);
 
-    function getBTokenOracle(uint256 bTokenId) external view returns (address);
-
     function getSymbolOracle(uint256 symbolId) external view returns (address);
 
-    function getLastUpdateBlock() external view returns (uint256);
-
-    function getProtocolFeeAccrued() external view returns (int256);
+    function getPoolStateValues() external view returns (uint256 lastTimestamp, int256 protocolFeeAccrued);
 
     function collectProtocolFee() external;
 
@@ -81,24 +76,61 @@ interface IPerpetualPool {
 
     function addSymbol(SymbolInfo memory info) external;
 
-    function setBTokenParameters(uint256 bTokenId, address swapperAddress, address oracleAddress, uint256 discount) external;
+    function setBTokenParameters(
+        uint256 bTokenId,
+        address swapperAddress,
+        address oracleAddress,
+        uint256 discount
+    ) external;
 
-    function setSymbolParameters(uint256 symbolId, address oracleAddress, uint256 feeRatio, uint256 fundingRateCoefficient) external;
+    function setSymbolParameters(
+        uint256 symbolId,
+        address oracleAddress,
+        uint256 feeRatio,
+        uint256 alpha
+    ) external;
 
-    function approvePoolMigration(address targetPool) external;
+    function approveBTokenForTargetPool(uint256 bTokenId, address targetPool) external;
 
-    function executePoolMigration(address sourcePool) external;
+    function setPoolForLTokenAndPToken(address targetPool) external;
 
-    function addLiquidity(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) external;
+    function migrateBToken(
+        address sourcePool,
+        uint256 balance,
+        address bTokenAddress,
+        address swapperAddress,
+        address oracleAddress,
+        uint256 decimals,
+        int256  discount,
+        int256  liquidity,
+        int256  pnl,
+        int256  cumulativePnl
+    ) external;
 
-    function removeLiquidity(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) external;
+    function migrateSymbol(
+        string memory symbol,
+        address oracleAddress,
+        int256  multiplier,
+        int256  feeRatio,
+        int256  alpha,
+        int256  dpmmPrice,
+        int256  tradersNetVolume,
+        int256  tradersNetCost,
+        int256  cumulativeFundingRate
+    ) external;
 
-    function addMargin(address owner, uint256 bTokenId, uint256 bAmount) external;
+    function migratePoolStateValues(uint256 lastTimestamp, int256 protocolFeeAccrued) external;
 
-    function removeMargin(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) external;
+    function addLiquidity(address lp, uint256 bTokenId, uint256 bAmount) external;
 
-    function trade(address owner, uint256 symbolId, int256 tradeVolume, uint256 blength, uint256 slength) external;
+    function removeLiquidity(address lp, uint256 bTokenId, uint256 bAmount) external;
 
-    function liquidate(address liquidator, address owner, uint256 blength, uint256 slength) external;
+    function addMargin(address trader, uint256 bTokenId, uint256 bAmount) external;
+
+    function removeMargin(address trader, uint256 bTokenId, uint256 bAmount) external;
+
+    function trade(address trader, uint256 symbolId, int256 tradeVolume) external;
+
+    function liquidate(address liquidator, address trader) external;
 
 }
