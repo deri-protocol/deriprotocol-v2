@@ -109,4 +109,6 @@ interface IPerpetualPoolLite is IMigratable {
 
     function liquidate(address account, SignedPrice[] memory prices) external;
 
+    function liquidate(uint256 pTokenId, SignedPrice[] memory prices) external;
+
 }

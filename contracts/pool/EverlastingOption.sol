@@ -274,7 +274,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         _trade(account, symbolId, tradeVolume);
     }
 
-    function liquidate(address account, SignedValue[] memory volatilities) external override {
+    function liquidate(address account, SignedValue[] memory volatilities) public override {
         address liquidator = msg.sender;
         require(
             _liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(_liquidatorQualifierAddress).isQualifiedLiquidator(liquidator),
@@ -283,6 +283,10 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         require(IPTokenOption(_pTokenAddress).exists(account), 'no pToken');
         _updateSymbolVolatilities(volatilities);
         _liquidate(liquidator, account);
+    }
+
+    function liquidate(uint256 pTokenId, SignedValue[] memory volatilities) external override {
+        liquidate(IPTokenOption(_pTokenAddress).ownerOf(pTokenId), volatilities);
     }
 
 
@@ -328,7 +332,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         }
         int256 poolPnlAfter = _getPoolPnl(symbols);
 
-        uint256 compensation = (poolPnlBefore - poolPnlAfter).itou() * lShares / totalSupply;
+        uint256 compensation = (poolPnlBefore - poolPnlAfter).itou();
         bAmount -= compensation;
 
         int256 poolRequiredMargin = _getPoolRequiredMargin(symbols);
@@ -608,8 +612,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
     function _getPoolPnl(DataSymbol[] memory symbols) internal pure returns (int256 poolPnl) {
         for (uint256 i = 0; i < symbols.length; i++) {
             DataSymbol memory s = symbols[i];
-            int256 cost = s.tradersNetPosition * s.dpmmPrice / ONE;
-            poolPnl -= cost - s.tradersNetCost;
+            poolPnl += _queryTradeDpmm(s.tradersNetPosition, s.theoreticalPrice, -s.tradersNetPosition, s.K) + s.tradersNetCost;
         }
     }
 
@@ -617,9 +620,9 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         int256 poolMarginMultiplier = _poolMarginMultiplier;
         for (uint256 i = 0; i < symbols.length; i++) {
             DataSymbol memory s = symbols[i];
-            int256 notional = s.tradersNetPosition * s.spotPrice / ONE;
+            int256 notional = (s.tradersNetPosition * s.spotPrice / ONE).abs();
             // pool margin requirement is 10x trader margin requirement
-            poolRequiredMargin += notional.abs() * s.dynamicInitialMarginRatio * poolMarginMultiplier / ONE;
+            poolRequiredMargin += notional * s.dynamicInitialMarginRatio * poolMarginMultiplier / ONE;
         }
     }
 
@@ -659,10 +662,9 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             DataSymbol memory s = symbols[i];
             IPTokenOption.Position memory p = positions[i];
             if (p.volume != 0) {
-                int256 cost = p.volume * s.dpmmPrice / ONE * s.multiplier / ONE;
-                dynamicMargin += cost - p.cost;
-                int256 notional = p.volume * s.spotPrice / ONE * s.multiplier / ONE;
-                requiredInitialMargin += notional.abs() * s.dynamicInitialMarginRatio / ONE;
+                dynamicMargin -= _queryTradeDpmm(s.tradersNetPosition, s.theoreticalPrice, -p.volume * s.multiplier / ONE, s.K) + p.cost;
+                int256 notional = (p.volume * s.spotPrice / ONE * s.multiplier / ONE).abs();
+                requiredInitialMargin += notional * s.dynamicInitialMarginRatio / ONE;
             }
         }
         int256 requiredMaintenanceMargin = requiredInitialMargin * _maintenanceMarginRatio / _initialMarginRatio;

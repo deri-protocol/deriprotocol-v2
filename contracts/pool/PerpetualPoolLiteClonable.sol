@@ -38,7 +38,7 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
     address _protocolFeeCollector;
 
     // funding period in seconds, funding collected for each volume during this period will be (dpmmPrice - indexPrice)
-    int256  _fundingPeriod = 3 * 24 * 3600;
+    int256  _fundingPeriod = 3 * 24 * 3600 * ONE;
 
     int256  _liquidity;
     uint256 _lastTimestamp;
@@ -245,7 +245,7 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         _trade(account, symbolId, tradeVolume);
     }
 
-    function liquidate(address account, SignedPrice[] memory prices) external override {
+    function liquidate(address account, SignedPrice[] memory prices) public override {
         address liquidator = msg.sender;
         require(
             _liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(_liquidatorQualifierAddress).isQualifiedLiquidator(liquidator),
@@ -254,6 +254,10 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         require(IPTokenLite(_pTokenAddress).exists(account), 'no pToken');
         _updateSymbolPrices(prices);
         _liquidate(liquidator, account);
+    }
+
+    function liquidate(uint256 pTokenId, SignedPrice[] memory prices) external override {
+        liquidate(IPTokenLite(_pTokenAddress).ownerOf(pTokenId), prices);
     }
 
 
@@ -298,7 +302,7 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         }
         int256 poolPnlAfter = _getPoolPnl(symbols);
 
-        uint256 compensation = (poolPnlBefore - poolPnlAfter).itou() * lShares / totalSupply;
+        uint256 compensation = (poolPnlBefore - poolPnlAfter).itou();
         bAmount -= compensation;
 
         int256 poolRequiredMargin = _getPoolRequiredMargin(symbols);
@@ -519,7 +523,7 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
             int256 fundingPeriod = _fundingPeriod;
             for (uint256 i = 0; i < symbols.length; i++) {
                 DataSymbol memory s = symbols[i];
-                int256 ratePerSecond = (s.dpmmPrice - s.indexPrice) * s.multiplier / ONE / fundingPeriod;
+                int256 ratePerSecond = (s.dpmmPrice - s.indexPrice) * s.multiplier / fundingPeriod;
                 int256 diff = ratePerSecond * int256(curTimestamp - preTimestamp);
                 unchecked { s.cumulativeFundingRate += diff; }
                 _symbols[s.symbolId].cumulativeFundingRate = s.cumulativeFundingRate;
@@ -531,16 +535,15 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
     function _getPoolPnl(DataSymbol[] memory symbols) internal pure returns (int256 poolPnl) {
         for (uint256 i = 0; i < symbols.length; i++) {
             DataSymbol memory s = symbols[i];
-            int256 cost = s.tradersNetPosition * s.dpmmPrice / ONE;
-            poolPnl -= cost - s.tradersNetCost;
+            poolPnl += DpmmPricerFutures._calculateDpmmCost(s.indexPrice, s.K, s.tradersNetPosition, -s.tradersNetPosition) + s.tradersNetCost;
         }
     }
 
     function _getPoolRequiredMargin(DataSymbol[] memory symbols) internal view returns (int256 poolRequiredMargin) {
         for (uint256 i = 0; i < symbols.length; i++) {
             DataSymbol memory s = symbols[i];
-            int256 notional = s.tradersNetPosition * s.indexPrice / ONE;
-            poolRequiredMargin += notional.abs() * _poolMarginRatio / ONE;
+            int256 notional = (s.tradersNetPosition * s.indexPrice / ONE).abs();
+            poolRequiredMargin += notional * _poolMarginRatio / ONE;
         }
     }
 
@@ -580,10 +583,9 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
             DataSymbol memory s = symbols[i];
             IPTokenLite.Position memory p = positions[i];
             if (p.volume != 0) {
-                int256 cost = p.volume * s.dpmmPrice / ONE * s.multiplier / ONE;
-                dynamicMargin += cost - p.cost;
-                int256 notional = p.volume * s.indexPrice / ONE * s.multiplier / ONE;
-                requiredInitialMargin += notional.abs() * _initialMarginRatio / ONE;
+                dynamicMargin -= DpmmPricerFutures._calculateDpmmCost(s.indexPrice, s.K, s.tradersNetPosition, -p.volume * s.multiplier / ONE) + p.cost;
+                int256 notional = (p.volume * s.indexPrice / ONE * s.multiplier / ONE).abs();
+                requiredInitialMargin += notional * _initialMarginRatio / ONE;
             }
         }
         int256 requiredMaintenanceMargin = requiredInitialMargin * _maintenanceMarginRatio / _initialMarginRatio;
