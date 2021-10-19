@@ -733,8 +733,10 @@ contract PerpetualPool is IPerpetualPool {
                     (amountB0, amountBX) = IBTokenSwapper(_bTokens[i].swapperAddress).swapBXForExactB0(
                         (-margins[0]).ceil(_decimals0).itou(), margins[i].itou(), data.bTokens[i].price.itou()
                     );
-                    margins[0] += amountB0.utoi();
-                    margins[i] -= amountBX.utoi();
+                    (int256 b0, int256 bx) = (amountB0.utoi(), amountBX.utoi());
+                    margins[0] += b0;
+                    margins[i] -= bx;
+                    data.totalTraderEquity += b0 - bx * data.bTokens[i].price / ONE * data.bTokens[i].discount / ONE;
                     data.bTokens[i].marginUpdated = true;
                 }
                 if (margins[0] >= 0) break;
