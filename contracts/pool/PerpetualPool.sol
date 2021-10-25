@@ -2,26 +2,16 @@
 
 pragma solidity >=0.8.0 <0.9.0;
 
+import '../interface/IPerpetualPoolOld.sol';
+import '../interface/IPerpetualPool.sol';
 import '../interface/IERC20.sol';
 import '../interface/IOracle.sol';
-import '../interface/IBTokenSwapper.sol';
 import '../interface/IPToken.sol';
 import '../interface/ILToken.sol';
-import '../interface/IPerpetualPool.sol';
+import '../interface/IBTokenSwapper.sol';
 import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
-
-/*
-Revert Code:
-
-reentry         : reentry is blocked
-router only     : can only called by router
-wrong dec       : wrong bToken decimals
-insuf't b0      : pool insufficient bToken0
-insuf't liq     : pool insufficient liquidity
-insuf't margin  : trader insufficient margin
-cant liquidate  : cannot liquidate trader
-*/
+import '../library/DpmmPricerFutures.sol';
 
 contract PerpetualPool is IPerpetualPool {
 
@@ -35,8 +25,8 @@ contract PerpetualPool is IPerpetualPool {
     uint256 immutable _decimals0;
     int256  immutable _minBToken0Ratio;
     int256  immutable _minPoolMarginRatio;
-    int256  immutable _minInitialMarginRatio;
-    int256  immutable _minMaintenanceMarginRatio;
+    int256  immutable _initialMarginRatio;
+    int256  immutable _maintenanceMarginRatio;
     int256  immutable _minLiquidationReward;
     int256  immutable _maxLiquidationReward;
     int256  immutable _liquidationCutRatio;
@@ -47,11 +37,14 @@ contract PerpetualPool is IPerpetualPool {
     address immutable _routerAddress;
     address immutable _protocolFeeCollector;
 
-    uint256 _lastUpdateBlock;
-    int256  _protocolFeeAccrued;
-
     BTokenInfo[] _bTokens;   // bTokenId indexed
     SymbolInfo[] _symbols;   // symbolId indexed
+
+    // funding period in seconds, funding collected for each volume during this period will be (dpmmPrice - indexPrice)
+    int256 constant _fundingPeriod = 3 * 24 * 3600 * ONE;
+
+    uint256 _lastTimestamp;
+    int256  _protocolFeeAccrued;
 
     bool private _mutex;
     modifier _lock_() {
@@ -61,17 +54,12 @@ contract PerpetualPool is IPerpetualPool {
         _mutex = false;
     }
 
-    modifier _router_() {
-        require(msg.sender == _routerAddress, 'router only');
-        _;
-    }
-
     constructor (uint256[9] memory parameters, address[4] memory addresses) {
         _decimals0 = parameters[0];
         _minBToken0Ratio = int256(parameters[1]);
         _minPoolMarginRatio = int256(parameters[2]);
-        _minInitialMarginRatio = int256(parameters[3]);
-        _minMaintenanceMarginRatio = int256(parameters[4]);
+        _initialMarginRatio = int256(parameters[3]);
+        _maintenanceMarginRatio = int256(parameters[4]);
         _minLiquidationReward = int256(parameters[5]);
         _maxLiquidationReward = int256(parameters[6]);
         _liquidationCutRatio = int256(parameters[7]);
@@ -87,8 +75,8 @@ contract PerpetualPool is IPerpetualPool {
         uint256 decimals0,
         int256  minBToken0Ratio,
         int256  minPoolMarginRatio,
-        int256  minInitialMarginRatio,
-        int256  minMaintenanceMarginRatio,
+        int256  initialMarginRatio,
+        int256  maintenanceMarginRatio,
         int256  minLiquidationReward,
         int256  maxLiquidationReward,
         int256  liquidationCutRatio,
@@ -97,8 +85,8 @@ contract PerpetualPool is IPerpetualPool {
         decimals0 = _decimals0;
         minBToken0Ratio = _minBToken0Ratio;
         minPoolMarginRatio = _minPoolMarginRatio;
-        minInitialMarginRatio = _minInitialMarginRatio;
-        minMaintenanceMarginRatio = _minMaintenanceMarginRatio;
+        initialMarginRatio = _initialMarginRatio;
+        maintenanceMarginRatio = _maintenanceMarginRatio;
         minLiquidationReward = _minLiquidationReward;
         maxLiquidationReward = _maxLiquidationReward;
         liquidationCutRatio = _liquidationCutRatio;
@@ -129,52 +117,43 @@ contract PerpetualPool is IPerpetualPool {
         return _symbols[symbolId];
     }
 
-    function getBTokenOracle(uint256 bTokenId) external override view returns (address) {
-        return _bTokens[bTokenId].oracleAddress;
-    }
-
     function getSymbolOracle(uint256 symbolId) external override view returns (address) {
         return _symbols[symbolId].oracleAddress;
     }
 
-    function getLastUpdateBlock() external override view returns (uint256) {
-        return _lastUpdateBlock;
-    }
-
-    function getProtocolFeeAccrued() external override view returns (int256) {
-        return _protocolFeeAccrued;
+    function getPoolStateValues() external override view returns (uint256 lastTimestamp, int256 protocolFeeAccrued) {
+        return (_lastTimestamp, _protocolFeeAccrued);
     }
 
     function collectProtocolFee() external override {
         IERC20 token = IERC20(_bTokens[0].bTokenAddress);
         uint256 amount = _protocolFeeAccrued.itou().rescale(18, _decimals0);
-        if (amount > token.balanceOf(address(this))) amount = token.balanceOf(address(this));
+        // if (amount > token.balanceOf(address(this))) amount = token.balanceOf(address(this));
         _protocolFeeAccrued -= amount.rescale(_decimals0, 18).utoi();
         token.safeTransfer(_protocolFeeCollector, amount);
         emit ProtocolFeeCollection(_protocolFeeCollector, amount.rescale(_decimals0, 18));
     }
 
-    function addBToken(BTokenInfo memory info) external override _router_ {
-        if (_bTokens.length > 0) {
-            // approve for non bToken0 swappers
-            IERC20(_bTokens[0].bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
-            IERC20(info.bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
-            info.price = IOracle(info.oracleAddress).getPrice().utoi();
-        } else {
-            require(info.decimals == _decimals0, 'wrong dec');
-            info.price = ONE;
-        }
-        _bTokens.push(info);
+    function addBToken(BTokenInfo memory info) external override {
+        _checkRouter();
+        _addBToken(info);
         ILToken(_lTokenAddress).setNumBTokens(_bTokens.length);
         IPToken(_pTokenAddress).setNumBTokens(_bTokens.length);
     }
 
-    function addSymbol(SymbolInfo memory info) external override _router_ {
+    function addSymbol(SymbolInfo memory info) external override {
+        _checkRouter();
         _symbols.push(info);
         IPToken(_pTokenAddress).setNumSymbols(_symbols.length);
     }
 
-    function setBTokenParameters(uint256 bTokenId, address swapperAddress, address oracleAddress, uint256 discount) external override _router_ {
+    function setBTokenParameters(
+        uint256 bTokenId,
+        address swapperAddress,
+        address oracleAddress,
+        uint256 discount
+    ) external override {
+        _checkRouter();
         BTokenInfo storage b = _bTokens[bTokenId];
         b.swapperAddress = swapperAddress;
         if (bTokenId != 0) {
@@ -184,275 +163,366 @@ contract PerpetualPool is IPerpetualPool {
             IERC20(_bTokens[bTokenId].bTokenAddress).safeApprove(swapperAddress, type(uint256).max);
         }
         b.oracleAddress = oracleAddress;
-        b.discount = int256(discount);
+        b.discount = discount.utoi();
     }
 
-    function setSymbolParameters(uint256 symbolId, address oracleAddress, uint256 feeRatio, uint256 fundingRateCoefficient) external override _router_ {
+    function setSymbolParameters(
+        uint256 symbolId,
+        address oracleAddress,
+        uint256 feeRatio,
+        uint256 alpha
+    ) external override {
+        _checkRouter();
         SymbolInfo storage s = _symbols[symbolId];
         s.oracleAddress = oracleAddress;
-        s.feeRatio = int256(feeRatio);
-        s.fundingRateCoefficient = int256(fundingRateCoefficient);
+        s.feeRatio = feeRatio.utoi();
+        s.alpha = alpha.utoi();
     }
 
-    // during a migration, this function is intended to be called in the source pool
-    function approvePoolMigration(address targetPool) external override _router_ {
-        for (uint256 i = 0; i < _bTokens.length; i++) {
-            IERC20(_bTokens[i].bTokenAddress).safeApprove(targetPool, type(uint256).max);
-        }
+
+    //================================================================================
+    // Migration, can only be called during migration process
+    //================================================================================
+
+    function approveBTokenForTargetPool(uint256 bTokenId, address targetPool) external override {
+        _checkRouter();
+        IERC20(_bTokens[bTokenId].bTokenAddress).safeApprove(targetPool, type(uint256).max);
+    }
+
+    function setPoolForLTokenAndPToken(address targetPool) external override {
+        _checkRouter();
         ILToken(_lTokenAddress).setPool(targetPool);
         IPToken(_pTokenAddress).setPool(targetPool);
     }
 
-    // during a migration, this function is intended to be called in the target pool
-    function executePoolMigration(address sourcePool) external override _router_ {
-        // (uint256 blength, uint256 slength) = IPerpetualPool(sourcePool).getLengths();
-        // for (uint256 i = 0; i < blength; i++) {
-        //     BTokenInfo memory b = IPerpetualPool(sourcePool).getBToken(i);
-        //     IERC20(b.bTokenAddress).safeTransferFrom(sourcePool, address(this), IERC20(b.bTokenAddress).balanceOf(sourcePool));
-        //     _bTokens.push(b);
-        // }
-        // for (uint256 i = 0; i < slength; i++) {
-        //     _symbols.push(IPerpetualPool(sourcePool).getSymbol(i));
-        // }
-        // _protocolFeeAccrued = IPerpetualPool(sourcePool).getProtocolFeeAccrued();
+    function migrateBToken(
+        address sourcePool,
+        uint256 balance,
+        address bTokenAddress,
+        address swapperAddress,
+        address oracleAddress,
+        uint256 decimals,
+        int256  discount,
+        int256  liquidity,
+        int256  pnl,
+        int256  cumulativePnl
+    ) external override {
+        _checkRouter();
+        IERC20(bTokenAddress).safeTransferFrom(sourcePool, address(this), balance);
+        BTokenInfo memory b;
+        b.bTokenAddress = bTokenAddress;
+        b.swapperAddress = swapperAddress;
+        b.oracleAddress = oracleAddress;
+        b.decimals = decimals;
+        b.discount = discount;
+        b.liquidity = liquidity;
+        b.pnl = pnl;
+        b.cumulativePnl = cumulativePnl;
+        _addBToken(b);
+    }
+
+    function migrateSymbol(
+        string memory symbol,
+        address oracleAddress,
+        int256  multiplier,
+        int256  feeRatio,
+        int256  alpha,
+        int256  distributedUnrealizedPnl,
+        int256  tradersNetVolume,
+        int256  tradersNetCost,
+        int256  cumulativeFundingRate
+    ) external override {
+        _checkRouter();
+        SymbolInfo memory s;
+        s.symbol = symbol;
+        s.oracleAddress = oracleAddress;
+        s.multiplier = multiplier;
+        s.feeRatio = feeRatio;
+        s.alpha = alpha;
+        s.distributedUnrealizedPnl = distributedUnrealizedPnl;
+        s.tradersNetVolume = tradersNetVolume;
+        s.tradersNetCost = tradersNetCost;
+        s.cumulativeFundingRate = cumulativeFundingRate;
+        _symbols.push(s);
+    }
+
+    function migratePoolStateValues(uint256 lastTimestamp, int256 protocolFeeAccrued) external override {
+        _checkRouter();
+        _lastTimestamp = lastTimestamp;
+        _protocolFeeAccrued = protocolFeeAccrued;
     }
 
 
     //================================================================================
-    // Core Logics
+    // Interactions
     //================================================================================
 
-    function addLiquidity(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) external override _router_ _lock_ {
+    function addLiquidity(address lp, uint256 bTokenId, uint256 bAmount) external override _lock_ {
+        _checkRouter();
+        Data memory data = _getBTokensAndSymbols(bTokenId, type(uint256).max);
+        _distributePnlToBTokens(data);
+        BTokenData memory b = data.bTokens[bTokenId];
+
         ILToken lToken = ILToken(_lTokenAddress);
-        if(!lToken.exists(owner)) lToken.mint(owner);
+        if(!lToken.exists(lp)) lToken.mint(lp);
+        ILToken.Asset memory asset = lToken.getAsset(lp, bTokenId);
 
-        _updateBTokenPrice(bTokenId);
-        _updatePricesAndDistributePnl(blength, slength);
+        bAmount = _transferIn(b.bTokenAddress, b.decimals, lp, bAmount);
 
-        BTokenInfo storage b = _bTokens[bTokenId];
-        bAmount = _deflationCompatibleSafeTransferFrom(b.bTokenAddress, b.decimals, owner, address(this), bAmount);
+        int256 deltaLiquidity = bAmount.utoi(); // lp's liquidity change amount for bTokenId
+        int256 deltaEquity = deltaLiquidity * b.price / ONE * b.discount / ONE;
+        b.equity += deltaEquity;
+        data.totalEquity += deltaEquity;
 
-        int256 cumulativePnl = b.cumulativePnl;
-        ILToken.Asset memory asset = lToken.getAsset(owner, bTokenId);
-
-        int256 delta; // owner's liquidity change amount for bTokenId
-        int256 pnl = (cumulativePnl - asset.lastCumulativePnl) * asset.liquidity / ONE; // owner's pnl as LP since last settlement
+        asset.pnl += (b.cumulativePnl - asset.lastCumulativePnl) * asset.liquidity / ONE; // lp's pnl as LP since last settlement
         if (bTokenId == 0) {
-            delta = bAmount.utoi() + pnl.reformat(_decimals0);
-            b.pnl -= pnl; // this pnl comes from b.pnl, thus should be deducted from b.pnl
-            _protocolFeeAccrued += pnl - pnl.reformat(_decimals0); // deal with accuracy tail
-        } else {
-            delta = bAmount.utoi();
-            asset.pnl += pnl;
+            deltaLiquidity += _accrueTail(asset.pnl);
+            b.pnl -= asset.pnl; // this pnl comes from b.pnl, thus should be deducted
+            asset.pnl = 0;
         }
-        asset.liquidity += delta;
-        asset.lastCumulativePnl = cumulativePnl;
-        b.liquidity += delta;
 
-        lToken.updateAsset(owner, bTokenId, asset);
+        asset.liquidity += deltaLiquidity;
+        asset.lastCumulativePnl = b.cumulativePnl;
+        b.liquidity += deltaLiquidity;
 
-        (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
-        require(_getBToken0Ratio(totalDynamicEquity, dynamicEquities) >= _minBToken0Ratio, "insuf't b0");
+        _updateBTokensAndSymbols(data);
+        lToken.updateAsset(lp, bTokenId, asset);
 
-        emit AddLiquidity(owner, bTokenId, bAmount);
+        require(data.bTokens[0].equity * ONE >= data.totalEquity * _minBToken0Ratio, "insuf't b0");
+
+        emit AddLiquidity(lp, bTokenId, bAmount);
     }
 
-    function removeLiquidity(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) external override _router_ _lock_ {
-        _updateBTokenPrice(bTokenId);
-        _updatePricesAndDistributePnl(blength, slength);
+    function removeLiquidity(address lp, uint256 bTokenId, uint256 bAmount) external override _lock_ {
+        _checkRouter();
+        Data memory data = _getBTokensAndSymbols(bTokenId, type(uint256).max);
+        BTokenData memory b = data.bTokens[bTokenId];
 
-        BTokenInfo storage b = _bTokens[bTokenId];
         ILToken lToken = ILToken(_lTokenAddress);
-        ILToken.Asset memory asset = lToken.getAsset(owner, bTokenId);
-        uint256 decimals = b.decimals;
-        bAmount = bAmount.reformat(decimals);
+        ILToken.Asset memory asset = lToken.getAsset(lp, bTokenId);
 
-        { // scope begin
-        int256 cumulativePnl = b.cumulativePnl;
         int256 amount = bAmount.utoi();
-        int256 pnl = (cumulativePnl - asset.lastCumulativePnl) * asset.liquidity / ONE;
+        if (amount > asset.liquidity) amount = asset.liquidity;
+
+        // compensation caused by dpmmPrice change when removing liquidity
+        int256 totalEquity = data.totalEquity + data.undistributedPnl - amount * b.price / ONE * b.discount / ONE;
+        if (totalEquity > 0) {
+            int256 compensation;
+            for (uint256 i = 0; i < data.symbols.length; i++) {
+                SymbolData memory s = data.symbols[i];
+                if (s.active) {
+                    int256 K = DpmmPricerFutures._calculateK(s.indexPrice, totalEquity, s.alpha);
+                    int256 newPnl = -DpmmPricerFutures._calculateDpmmCost(s.indexPrice, K, s.tradersNetPosition, -s.tradersNetPosition) - s.tradersNetCost;
+                    compensation += newPnl - s.pnl;
+                }
+            }
+            asset.pnl -= compensation;
+            b.pnl -= compensation;
+            b.equity -= compensation;
+            data.totalEquity -= compensation;
+            data.undistributedPnl += compensation;
+        }
+
+        _distributePnlToBTokens(data);
+
         int256 deltaLiquidity;
-        int256 deltaPnl;
+        int256 pnl = (b.cumulativePnl - asset.lastCumulativePnl) * asset.liquidity / ONE;
+        asset.pnl += pnl;
         if (bTokenId == 0) {
-            deltaLiquidity = pnl.reformat(_decimals0);
-            deltaPnl = -pnl;
-            _protocolFeeAccrued += pnl - pnl.reformat(_decimals0); // deal with accuracy tail
+            deltaLiquidity = _accrueTail(asset.pnl);
+            b.pnl -= asset.pnl;
+            asset.pnl = 0;
         } else {
-            asset.pnl += pnl;
             if (asset.pnl < 0) {
-                (uint256 amountB0, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapBXForExactB0(
+                (uint256 amountB0, uint256 amountBX) = IBTokenSwapper(_bTokens[bTokenId].swapperAddress).swapBXForExactB0(
                     (-asset.pnl).ceil(_decimals0).itou(), asset.liquidity.itou(), b.price.itou()
                 );
-                deltaLiquidity = -amountBX.utoi();
-                deltaPnl = amountB0.utoi();
-                asset.pnl += amountB0.utoi();
+                (int256 b0, int256 bx) = (amountB0.utoi(), amountBX.utoi());
+                deltaLiquidity = -bx;
+                asset.pnl += b0;
+                b.pnl += b0;
             } else if (asset.pnl > 0 && amount >= asset.liquidity) {
-                (, uint256 amountBX) = IBTokenSwapper(b.swapperAddress).swapExactB0ForBX(asset.pnl.itou(), b.price.itou());
+                (, uint256 amountBX) = IBTokenSwapper(_bTokens[bTokenId].swapperAddress).swapExactB0ForBX(
+                    asset.pnl.itou(), b.price.itou()
+                );
                 deltaLiquidity = amountBX.utoi();
-                deltaPnl = -asset.pnl;
-                _protocolFeeAccrued += asset.pnl - asset.pnl.reformat(_decimals0); // deal with accuracy tail
+                b.pnl -= asset.pnl;
+                _accrueTail(asset.pnl);
                 asset.pnl = 0;
             }
         }
-        asset.lastCumulativePnl = cumulativePnl;
 
+        asset.lastCumulativePnl = b.cumulativePnl;
         if (amount >= asset.liquidity || amount >= asset.liquidity + deltaLiquidity) {
-            bAmount = (asset.liquidity + deltaLiquidity).itou();
+            amount = asset.liquidity + deltaLiquidity;
             b.liquidity -= asset.liquidity;
             asset.liquidity = 0;
         } else {
-            asset.liquidity += deltaLiquidity - amount;
-            b.liquidity += deltaLiquidity - amount;
+            b.liquidity -= amount - deltaLiquidity;
+            asset.liquidity -= amount - deltaLiquidity;
         }
-        b.pnl += deltaPnl;
-        lToken.updateAsset(owner, bTokenId, asset);
-        } // scope end
 
-        (int256 totalDynamicEquity, ) = _getBTokenDynamicEquities(blength);
-        require(_getPoolMarginRatio(totalDynamicEquity, slength) >= _minPoolMarginRatio, "insuf't liq");
+        int256 deltaEquity = amount * b.price / ONE * b.discount / ONE;
+        b.equity -= deltaEquity;
+        data.totalEquity -= deltaEquity;
 
-        IERC20(b.bTokenAddress).safeTransfer(owner, bAmount.rescale(18, decimals));
-        emit RemoveLiquidity(owner, bTokenId, bAmount);
+        _updateBTokensAndSymbols(data);
+        lToken.updateAsset(lp, bTokenId, asset);
+
+        require(data.totalEquity * ONE >= data.totalNotional * _minPoolMarginRatio, "insuf't liq");
+
+        _transferOut(b.bTokenAddress, b.decimals, lp, amount.itou());
+        emit RemoveLiquidity(lp, bTokenId, bAmount);
     }
 
-    function addMargin(address owner, uint256 bTokenId, uint256 bAmount) external override _router_ _lock_ {
+    function addMargin(address trader, uint256 bTokenId, uint256 bAmount) external override _lock_ {
+        _checkRouter();
         IPToken pToken = IPToken(_pTokenAddress);
-        if (!pToken.exists(owner)) pToken.mint(owner);
+        if (!pToken.exists(trader)) pToken.mint(trader);
 
-        BTokenInfo storage b = _bTokens[bTokenId];
-        bAmount = _deflationCompatibleSafeTransferFrom(b.bTokenAddress, b.decimals, owner, address(this), bAmount);
+        BTokenInfo storage bb = _bTokens[bTokenId];
+        bAmount = _transferIn(bb.bTokenAddress, bb.decimals, trader, bAmount);
 
-        int256 margin = pToken.getMargin(owner, bTokenId) + bAmount.utoi();
+        int256 margin = pToken.getMargin(trader, bTokenId) + bAmount.utoi();
 
-        pToken.updateMargin(owner, bTokenId, margin);
-        emit AddMargin(owner, bTokenId, bAmount);
+        pToken.updateMargin(trader, bTokenId, margin);
+        emit AddMargin(trader, bTokenId, bAmount);
     }
 
-    function removeMargin(address owner, uint256 bTokenId, uint256 bAmount, uint256 blength, uint256 slength) external override _router_ _lock_ {
-        _updatePricesAndDistributePnl(blength, slength);
-        _settleTraderFundingFee(owner, slength);
-        _coverTraderDebt(owner, blength);
+    function removeMargin(address trader, uint256 bTokenId, uint256 bAmount) external override _lock_ {
+        _checkRouter();
+        Data memory data = _getBTokensAndSymbols(bTokenId, type(uint256).max);
+        BTokenData memory b = data.bTokens[bTokenId];
 
-        IPToken pToken = IPToken(_pTokenAddress);
-        BTokenInfo storage b = _bTokens[bTokenId];
-        uint256 decimals = b.decimals;
-        bAmount = bAmount.reformat(decimals);
+        _distributePnlToBTokens(data);
+        _getMarginsAndPositions(data, trader);
+        _coverTraderDebt(data);
 
         int256 amount = bAmount.utoi();
-        int256 margin = pToken.getMargin(owner, bTokenId);
-
+        int256 margin = data.margins[bTokenId];
         if (amount >= margin) {
-            bAmount = margin.itou();
-            if (bTokenId == 0) _protocolFeeAccrued += margin - margin.reformat(_decimals0); // deal with accuracy tail
-            margin = 0;
+            if (bTokenId == 0) amount = _accrueTail(margin);
+            bAmount = amount.itou();
+            data.margins[bTokenId] = 0;
         } else {
-            margin -= amount;
+            data.margins[bTokenId] -= amount;
         }
-        pToken.updateMargin(owner, bTokenId, margin);
+        b.marginUpdated = true;
+        data.totalTraderEquity -= amount * b.price / ONE * b.discount / ONE;
 
-        require(_getTraderMarginRatio(owner, blength, slength) >= _minInitialMarginRatio, "insuf't margin");
+        _updateBTokensAndSymbols(data);
+        _updateMarginsAndPositions(data);
 
-        IERC20(b.bTokenAddress).safeTransfer(owner, bAmount.rescale(18, decimals));
-        emit RemoveMargin(owner, bTokenId, bAmount);
+        require(data.totalTraderEquity * ONE >= data.totalTraderNontional * _initialMarginRatio, "insuf't margin");
+
+        _transferOut(b.bTokenAddress, b.decimals, trader, bAmount);
+        emit RemoveMargin(trader, bTokenId, bAmount);
     }
 
-    // struct for temp use in trade function, to prevent stack too deep error
-    struct TradeParams {
-        int256 curCost;
-        int256 fee;
-        int256 realizedCost;
-        int256 protocolFee;
-    }
-
-    function trade(address owner, uint256 symbolId, int256 tradeVolume, uint256 blength, uint256 slength) external override _router_ _lock_ {
-        _updatePricesAndDistributePnl(blength, slength);
-        _settleTraderFundingFee(owner, slength);
-
-        SymbolInfo storage s = _symbols[symbolId];
-        IPToken.Position memory p = IPToken(_pTokenAddress).getPosition(owner, symbolId);
-
-        TradeParams memory params;
+    function trade(address trader, uint256 symbolId, int256 tradeVolume) external override _lock_ {
+        _checkRouter();
+        Data memory data = _getBTokensAndSymbols(type(uint256).max, symbolId);
+        _getMarginsAndPositions(data, trader);
+        SymbolData memory s = data.symbols[symbolId];
+        IPToken.Position memory p = data.positions[symbolId];
 
         tradeVolume = tradeVolume.reformat(0);
-        params.curCost = tradeVolume * s.price / ONE * s.multiplier / ONE;
-        params.fee = params.curCost.abs() * s.feeRatio / ONE;
+        require(tradeVolume != 0, '0 tradeVolume');
 
+        int256 curCost = DpmmPricerFutures._calculateDpmmCost(
+            s.indexPrice,
+            s.K,
+            s.tradersNetPosition,
+            tradeVolume * s.multiplier / ONE
+        );
+        int256 fee = curCost.abs() * s.feeRatio / ONE;
+
+        int256 realizedCost;
         if (!(p.volume >= 0 && tradeVolume >= 0) && !(p.volume <= 0 && tradeVolume <= 0)) {
             int256 absVolume = p.volume.abs();
             int256 absTradeVolume = tradeVolume.abs();
             if (absVolume <= absTradeVolume) {
-                params.realizedCost = params.curCost * absVolume / absTradeVolume + p.cost;
+                realizedCost = curCost * absVolume / absTradeVolume + p.cost;
             } else {
-                params.realizedCost = p.cost * absTradeVolume / absVolume + params.curCost;
+                realizedCost = p.cost * absTradeVolume / absVolume + curCost;
             }
         }
 
+        int256 preVolume = p.volume;
         p.volume += tradeVolume;
-        p.cost += params.curCost - params.realizedCost;
+        p.cost += curCost - realizedCost;
         p.lastCumulativeFundingRate = s.cumulativeFundingRate;
-        IPToken(_pTokenAddress).updateMargin(
-            owner, 0, IPToken(_pTokenAddress).getMargin(owner, 0) - params.fee - params.realizedCost
-        );
-        IPToken(_pTokenAddress).updatePosition(owner, symbolId, p);
+        s.positionUpdated = true;
+
+        data.margins[0] -= fee + realizedCost;
+
+        int256 protocolFee = fee * _protocolFeeCollectRatio / ONE;
+        _protocolFeeAccrued += protocolFee;
+        data.undistributedPnl += fee - protocolFee;
+
+        s.distributedUnrealizedPnl += realizedCost;
+        _distributePnlToBTokens(data);
 
         s.tradersNetVolume += tradeVolume;
-        s.tradersNetCost += params.curCost - params.realizedCost;
+        s.tradersNetCost += curCost - realizedCost;
 
-        params.protocolFee = params.fee * _protocolFeeCollectRatio / ONE;
-        _protocolFeeAccrued += params.protocolFee;
+        data.totalTraderNontional += (p.volume.abs() - preVolume.abs()) * s.indexPrice / ONE * s.multiplier / ONE;
+        data.totalNotional += s.tradersNetVolume.abs() * s.indexPrice / ONE * s.multiplier / ONE - s.notional;
 
-        (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
-        _distributePnlToBTokens(params.fee - params.protocolFee, totalDynamicEquity, dynamicEquities, blength);
-        require(_getPoolMarginRatio(totalDynamicEquity, slength) >= _minPoolMarginRatio, "insuf't liq");
-        require(_getTraderMarginRatio(owner, blength, slength) >= _minInitialMarginRatio, "insuf't margin");
+        IPToken(_pTokenAddress).updatePosition(trader, symbolId, p);
+        _updateBTokensAndSymbols(data);
+        _updateMarginsAndPositions(data);
 
-        emit Trade(owner, symbolId, tradeVolume, s.price.itou());
+        require(data.totalEquity * ONE >= data.totalNotional * _minPoolMarginRatio, "insuf't liq");
+        require(data.totalTraderEquity * ONE >= data.totalTraderNontional * _initialMarginRatio, "insuf't margin");
+
+        emit Trade(trader, symbolId, tradeVolume, curCost);
     }
 
-    function liquidate(address liquidator, address owner, uint256 blength, uint256 slength) external override _router_ _lock_ {
-        _updateAllBTokenPrices(blength);
-        _updatePricesAndDistributePnl(blength, slength);
-        _settleTraderFundingFee(owner, slength);
-        require(_getTraderMarginRatio(owner, blength, slength) < _minMaintenanceMarginRatio, 'cant liquidate');
+    function liquidate(address liquidator, address trader) external override _lock_ {
+        _checkRouter();
+        Data memory data = _getBTokensAndSymbols(type(uint256).max, type(uint256).max);
+        _getMarginsAndPositions(data, trader);
 
-        IPToken pToken = IPToken(_pTokenAddress);
-        IPToken.Position[] memory positions = pToken.getPositions(owner);
-        int256 netEquity;
-        for (uint256 i = 0; i < slength; i++) {
-            if (positions[i].volume != 0) {
-                _symbols[i].tradersNetVolume -= positions[i].volume;
-                _symbols[i].tradersNetCost -= positions[i].cost;
-                netEquity += positions[i].volume * _symbols[i].price / ONE * _symbols[i].multiplier / ONE - positions[i].cost;
-            }
-        }
+        require(data.totalTraderEquity * ONE < data.totalTraderNontional * _maintenanceMarginRatio, 'cant liq');
 
-        int256[] memory margins = pToken.getMargins(owner);
-        netEquity += margins[0];
-        for (uint256 i = 1; i < blength; i++) {
-            if (margins[i] > 0) {
-                (uint256 amountB0, ) = IBTokenSwapper(_bTokens[i].swapperAddress).swapExactBXForB0(margins[i].itou(), _bTokens[i].price.itou());
+        int256 netEquity = data.margins[0];
+        for (uint256 i = 1; i < data.bTokens.length; i++) {
+            if (data.margins[i] > 0) {
+                (uint256 amountB0, ) = IBTokenSwapper(_bTokens[i].swapperAddress).swapExactBXForB0(
+                    data.margins[i].itou(), data.bTokens[i].price.itou()
+                );
                 netEquity += amountB0.utoi();
             }
         }
 
+        for (uint256 i = 0; i < data.symbols.length; i++) {
+            IPToken.Position memory p = data.positions[i];
+            if (p.volume != 0) {
+                SymbolData memory s = data.symbols[i];
+                s.distributedUnrealizedPnl -= s.traderPnl;
+                s.tradersNetVolume -= p.volume;
+                s.tradersNetCost -= p.cost;
+            }
+        }
+        netEquity += data.totalTraderPnl;
+
         int256 reward;
-        int256 minReward = _minLiquidationReward;
-        int256 maxReward = _maxLiquidationReward;
-        if (netEquity <= minReward) {
-            reward = minReward;
-        } else if (netEquity >= maxReward) {
-            reward = maxReward;
+        if (netEquity <= _minLiquidationReward) {
+            reward = _minLiquidationReward;
         } else {
-            reward = ((netEquity - minReward) * _liquidationCutRatio / ONE + minReward).reformat(_decimals0);
+            reward = ((netEquity - _minLiquidationReward) * _liquidationCutRatio / ONE + _minLiquidationReward).reformat(_decimals0);
+            if (reward > _maxLiquidationReward) reward = _maxLiquidationReward;
         }
 
-        (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
-        _distributePnlToBTokens(netEquity - reward, totalDynamicEquity, dynamicEquities, blength);
+        data.undistributedPnl += netEquity - reward;
+        _distributePnlToBTokens(data);
 
-        pToken.burn(owner);
-        IERC20(_bTokens[0].bTokenAddress).safeTransfer(liquidator, reward.itou().rescale(18, _decimals0));
+        IPToken(_pTokenAddress).burn(trader);
+        _updateBTokensAndSymbols(data);
 
-        emit Liquidate(owner, liquidator, reward.itou());
+        _transferOut(_bTokens[0].bTokenAddress, _decimals0, liquidator, reward.itou());
+        emit Liquidate(trader, liquidator, reward.itou());
     }
 
 
@@ -460,182 +530,257 @@ contract PerpetualPool is IPerpetualPool {
     // Helpers
     //================================================================================
 
-    // update bTokens/symbols prices
-    // distribute pnl to bTokens, which is generated since last update, including pnl and funding fees for opening positions
-    // by calling this function at the beginning of each block, all LP/Traders status are settled
-    function _updatePricesAndDistributePnl(uint256 blength, uint256 slength) internal {
-        uint256 blocknumber = block.number;
-        if (blocknumber > _lastUpdateBlock) {
-            (int256 totalDynamicEquity, int256[] memory dynamicEquities) = _getBTokenDynamicEquities(blength);
-            int256 undistributedPnl = _updateSymbolPrices(totalDynamicEquity, slength);
-            _distributePnlToBTokens(undistributedPnl, totalDynamicEquity, dynamicEquities, blength);
-            _lastUpdateBlock = blocknumber;
+    function _addBToken(BTokenInfo memory info) internal {
+        if (_bTokens.length > 0) {
+            // approve for non bToken0 swappers
+            IERC20(_bTokens[0].bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
+            IERC20(info.bTokenAddress).safeApprove(info.swapperAddress, type(uint256).max);
+        } else {
+            require(info.decimals == _decimals0, 'wrong dec');
         }
+        _bTokens.push(info);
     }
 
-    function _updateAllBTokenPrices(uint256 blength) internal {
-        for (uint256 i = 1; i < blength; i++) {
-            _bTokens[i].price = IOracle(_bTokens[i].oracleAddress).getPrice().utoi();
-        }
+    function _checkRouter() internal view {
+        require(msg.sender == _routerAddress, 'router only');
     }
 
-    function _updateBTokenPrice(uint256 bTokenId) internal {
-        if (bTokenId != 0) _bTokens[bTokenId].price = IOracle(_bTokens[bTokenId].oracleAddress).getPrice().utoi();
+    struct BTokenData {
+        address bTokenAddress;
+        uint256 decimals;
+        int256  discount;
+        int256  liquidity;
+        int256  pnl;
+        int256  cumulativePnl;
+        int256  price;
+        int256  equity;
+        // trader
+        bool    marginUpdated;
     }
 
-    function _getBTokenDynamicEquities(uint256 blength) internal view returns (int256, int256[] memory) {
-        int256 totalDynamicEquity;
-        int256[] memory dynamicEquities = new int256[](blength);
-        for (uint256 i = 0; i < blength; i++) {
-            BTokenInfo storage b = _bTokens[i];
-            int256 liquidity = b.liquidity;
-            // dynamic equities for bTokens are discounted
-            int256 equity = liquidity * b.price / ONE * b.discount / ONE + b.pnl;
-            if (liquidity > 0 && equity > 0) {
-                totalDynamicEquity += equity;
-                dynamicEquities[i] = equity;
+    struct SymbolData {
+        bool    active;
+        int256  multiplier;
+        int256  feeRatio;
+        int256  alpha;
+        int256  K;
+        int256  indexPrice;
+        int256  dpmmPrice;
+        int256  distributedUnrealizedPnl;
+        int256  tradersNetVolume;
+        int256  tradersNetCost;
+        int256  cumulativeFundingRate;
+        int256  tradersNetPosition; // tradersNetVolume * multiplier / ONE
+        int256  notional;
+        int256  pnl;
+        // trader
+        bool    positionUpdated;
+        int256  traderPnl;
+    }
+
+    struct Data {
+        BTokenData[] bTokens;
+        SymbolData[] symbols;
+        uint256 preTimestamp;
+        uint256 curTimestamp;
+        int256  totalEquity;
+        int256  totalNotional;
+        int256  undistributedPnl;
+
+        address trader;
+        int256[] margins;
+        IPToken.Position[] positions;
+        int256 totalTraderPnl;
+        int256 totalTraderNontional;
+        int256 totalTraderEquity;
+    }
+
+    function _getBTokensAndSymbols(uint256 bTokenId, uint256 symbolId) internal returns (Data memory data) {
+        data.preTimestamp = _lastTimestamp;
+        data.curTimestamp = block.timestamp;
+
+        data.bTokens = new BTokenData[](_bTokens.length);
+        for (uint256 i = 0; i < data.bTokens.length; i++) {
+            BTokenData memory b = data.bTokens[i];
+            BTokenInfo storage bb = _bTokens[i];
+            b.liquidity = bb.liquidity;
+            if (i == bTokenId) {
+                b.bTokenAddress = bb.bTokenAddress;
+                b.decimals = bb.decimals;
             }
+            b.discount = bb.discount;
+            b.pnl = bb.pnl;
+            b.cumulativePnl = bb.cumulativePnl;
+            b.price = i == 0 ? ONE : IOracle(bb.oracleAddress).getPrice().utoi();
+            b.equity = b.liquidity * b.price / ONE * b.discount / ONE + b.pnl;
+            data.totalEquity += b.equity;
         }
-        return (totalDynamicEquity, dynamicEquities);
-    }
 
-    function _distributePnlToBTokens(int256 pnl, int256 totalDynamicEquity, int256[] memory dynamicEquities, uint256 blength) internal {
-        if (totalDynamicEquity > 0 && pnl != 0) {
-            for (uint256 i = 0; i < blength; i++) {
-                if (dynamicEquities[i] > 0) {
-                    BTokenInfo storage b = _bTokens[i];
-                    int256 distributedPnl = pnl * dynamicEquities[i] / totalDynamicEquity;
-                    b.pnl += distributedPnl;
-                    // cumulativePnl is as in per liquidity, thus b.liquidity in denominator
-                    b.cumulativePnl += distributedPnl * ONE / b.liquidity;
+        data.symbols = new SymbolData[](_symbols.length);
+        int256 fundingPeriod = _fundingPeriod;
+        for (uint256 i = 0; i < data.symbols.length; i++) {
+            SymbolData memory s = data.symbols[i];
+            SymbolInfo storage ss = _symbols[i];
+            s.tradersNetVolume = ss.tradersNetVolume;
+            s.tradersNetCost = ss.tradersNetCost;
+            if (i == symbolId || s.tradersNetVolume != 0 || s.tradersNetCost != 0) {
+                s.active = true;
+                s.multiplier = ss.multiplier;
+                s.feeRatio = ss.feeRatio;
+                s.alpha = ss.alpha;
+                s.indexPrice = IOracle(ss.oracleAddress).getPrice().utoi();
+                s.K = DpmmPricerFutures._calculateK(s.indexPrice, data.totalEquity, s.alpha);
+                s.dpmmPrice = DpmmPricerFutures._calculateDpmmPrice(s.indexPrice, s.K, s.tradersNetVolume * s.multiplier / ONE);
+                s.distributedUnrealizedPnl = ss.distributedUnrealizedPnl;
+                s.cumulativeFundingRate = ss.cumulativeFundingRate;
+
+                s.tradersNetPosition = s.tradersNetVolume * s.multiplier / ONE;
+                s.notional = (s.tradersNetPosition * s.indexPrice / ONE).abs();
+                data.totalNotional += s.notional;
+                s.pnl = -DpmmPricerFutures._calculateDpmmCost(s.indexPrice, s.K, s.tradersNetPosition, -s.tradersNetPosition) - s.tradersNetCost;
+                data.undistributedPnl -= s.pnl - s.distributedUnrealizedPnl;
+                s.distributedUnrealizedPnl = s.pnl;
+
+                if (data.curTimestamp > data.preTimestamp) {
+                    int256 ratePerSecond = (s.dpmmPrice - s.indexPrice) * s.multiplier / fundingPeriod;
+                    int256 diff = ratePerSecond * int256(data.curTimestamp - data.preTimestamp);
+                    data.undistributedPnl += s.tradersNetVolume * diff / ONE;
+                    unchecked { s.cumulativeFundingRate += diff; }
                 }
             }
         }
     }
 
-    // update symbol prices and calculate funding and unrealized pnl for all positions since last call
-    // the returned undistributedPnl will be distributed and shared by all LPs
-    //
-    //                 tradersNetVolume * price * multiplier
-    // ratePerBlock = --------------------------------------- * price * multiplier * fundingRateCoefficient
-    //                         totalDynamicEquity
-    //
-    function _updateSymbolPrices(int256 totalDynamicEquity, uint256 slength) internal returns (int256) {
-        if (totalDynamicEquity <= 0) return 0;
-        int256 undistributedPnl;
-        for (uint256 i = 0; i < slength; i++) {
-            SymbolInfo storage s = _symbols[i];
-            int256 price = IOracle(s.oracleAddress).getPrice().utoi();
-            int256 tradersNetVolume = s.tradersNetVolume;
-            if (tradersNetVolume != 0) {
-                int256 multiplier = s.multiplier;
-                int256 ratePerBlock = tradersNetVolume * price / ONE * price / ONE * multiplier / ONE * multiplier / ONE * s.fundingRateCoefficient / totalDynamicEquity;
-                int256 delta = ratePerBlock * int256(block.number - _lastUpdateBlock);
+    function _updateBTokensAndSymbols(Data memory data) internal {
+        _lastTimestamp = data.curTimestamp;
 
-                undistributedPnl += tradersNetVolume * delta / ONE;
-                undistributedPnl -= tradersNetVolume * (price - s.price) / ONE * multiplier / ONE;
-
-                unchecked { s.cumulativeFundingRate += delta; }
-            }
-            s.price = price;
+        for (uint256 i = 0; i < data.bTokens.length; i++) {
+            BTokenData memory b = data.bTokens[i];
+            BTokenInfo storage bb = _bTokens[i];
+            bb.liquidity = b.liquidity;
+            bb.pnl = b.pnl;
+            bb.cumulativePnl = b.cumulativePnl;
         }
-        return undistributedPnl;
-    }
 
-    function _getBToken0Ratio(int256 totalDynamicEquity, int256[] memory dynamicEquities) internal pure returns (int256) {
-        return totalDynamicEquity == 0 ? type(int256).max : dynamicEquities[0] * ONE / totalDynamicEquity;
-    }
-
-    function _getPoolMarginRatio(int256 totalDynamicEquity, uint256 slength) internal view returns (int256) {
-        int256 totalCost;
-        for (uint256 i = 0; i < slength; i++) {
-            SymbolInfo storage s = _symbols[i];
-            int256 tradersNetVolume = s.tradersNetVolume;
-            if (tradersNetVolume != 0) {
-                int256 cost = tradersNetVolume * s.price / ONE * s.multiplier / ONE;
-                totalDynamicEquity -= cost - s.tradersNetCost;
-                totalCost += cost.abs(); // netting costs cross symbols is forbidden
+        for (uint256 i = 0; i < data.symbols.length; i++) {
+            SymbolData memory s = data.symbols[i];
+            SymbolInfo storage ss = _symbols[i];
+            if (s.active) {
+                ss.distributedUnrealizedPnl = s.distributedUnrealizedPnl;
+                ss.tradersNetVolume = s.tradersNetVolume;
+                ss.tradersNetCost = s.tradersNetCost;
+                ss.cumulativeFundingRate = s.cumulativeFundingRate;
             }
         }
-        return totalCost == 0 ? type(int256).max : totalDynamicEquity * ONE / totalCost;
     }
 
-    // setting funding fee on trader's side
-    // this funding fee is already settled to bTokens in `_update`, thus distribution is not needed
-    function _settleTraderFundingFee(address owner, uint256 slength) internal {
+    function _distributePnlToBTokens(Data memory data) internal pure {
+        if (data.undistributedPnl != 0 && data.totalEquity > 0) {
+            for (uint256 i = 0; i < data.bTokens.length; i++) {
+                BTokenData memory b = data.bTokens[i];
+                if (b.liquidity > 0) {
+                    int256 pnl = data.undistributedPnl * b.equity / data.totalEquity;
+                    b.pnl += pnl;
+                    b.cumulativePnl += pnl * ONE / b.liquidity;
+                    b.equity += pnl;
+                }
+            }
+            data.totalEquity += data.undistributedPnl;
+            data.undistributedPnl = 0;
+        }
+    }
+
+    function _getMarginsAndPositions(Data memory data, address trader) internal view {
+        data.trader = trader;
         IPToken pToken = IPToken(_pTokenAddress);
-        int256 funding;
-        IPToken.Position[] memory positions = pToken.getPositions(owner);
-        for (uint256 i = 0; i < slength; i++) {
-            IPToken.Position memory p = positions[i];
+        data.margins = pToken.getMargins(trader);
+        data.positions = pToken.getPositions(trader);
+
+        data.bTokens[0].marginUpdated = true;
+
+        for (uint256 i = 0; i < data.symbols.length; i++) {
+            IPToken.Position memory p = data.positions[i];
             if (p.volume != 0) {
-                int256 cumulativeFundingRate = _symbols[i].cumulativeFundingRate;
-                int256 delta;
-                unchecked { delta = cumulativeFundingRate - p.lastCumulativeFundingRate; }
-                funding += p.volume * delta / ONE;
+                SymbolData memory s = data.symbols[i];
 
-                p.lastCumulativeFundingRate = cumulativeFundingRate;
-                pToken.updatePosition(owner, i, p);
+                int256 diff;
+                unchecked { diff = s.cumulativeFundingRate - p.lastCumulativeFundingRate; }
+                data.margins[0] -= p.volume * diff / ONE;
+                p.lastCumulativeFundingRate = s.cumulativeFundingRate;
+                s.positionUpdated = true;
+
+                data.totalTraderNontional += (p.volume * s.indexPrice / ONE * s.multiplier / ONE).abs();
+                s.traderPnl = -DpmmPricerFutures._calculateDpmmCost(s.indexPrice, s.K, s.tradersNetPosition, -p.volume * s.multiplier / ONE) - p.cost;
+                data.totalTraderPnl += s.traderPnl;
             }
         }
-        if (funding != 0) {
-            int256 margin = pToken.getMargin(owner, 0) - funding;
-            pToken.updateMargin(owner, 0, margin);
+
+        data.totalTraderEquity = data.totalTraderPnl + data.margins[0];
+        for (uint256 i = 1; i < data.bTokens.length; i++) {
+            if (data.margins[i] != 0) {
+                data.totalTraderEquity += data.margins[i] * data.bTokens[i].price / ONE * data.bTokens[i].discount / ONE;
+            }
         }
     }
 
-    function _coverTraderDebt(address owner, uint256 blength) internal {
-        IPToken pToken = IPToken(_pTokenAddress);
-        int256[] memory margins = pToken.getMargins(owner);
+    function _coverTraderDebt(Data memory data) internal {
+        int256[] memory margins = data.margins;
         if (margins[0] < 0) {
             uint256 amountB0;
             uint256 amountBX;
-            for (uint256 i = blength - 1; i > 0; i--) {
+            for (uint256 i = margins.length - 1; i > 0; i--) {
                 if (margins[i] > 0) {
                     (amountB0, amountBX) = IBTokenSwapper(_bTokens[i].swapperAddress).swapBXForExactB0(
-                        (-margins[0]).ceil(_decimals0).itou(), margins[i].itou(), _bTokens[i].price.itou()
+                        (-margins[0]).ceil(_decimals0).itou(), margins[i].itou(), data.bTokens[i].price.itou()
                     );
-                    margins[0] += amountB0.utoi();
-                    margins[i] -= amountBX.utoi();
+                    (int256 b0, int256 bx) = (amountB0.utoi(), amountBX.utoi());
+                    margins[0] += b0;
+                    margins[i] -= bx;
+                    data.totalTraderEquity += b0 - bx * data.bTokens[i].price / ONE * data.bTokens[i].discount / ONE;
+                    data.bTokens[i].marginUpdated = true;
                 }
                 if (margins[0] >= 0) break;
             }
-            pToken.updateMargins(owner, margins);
         }
     }
 
-    function _getTraderMarginRatio(address owner, uint256 blength, uint256 slength) internal view returns (int256) {
+    function _updateMarginsAndPositions(Data memory data) internal {
         IPToken pToken = IPToken(_pTokenAddress);
-
-        int256[] memory margins = pToken.getMargins(owner);
-        int256 totalDynamicEquity = margins[0];
-        int256 totalCost;
-        for (uint256 i = 1; i < blength; i++) {
-            totalDynamicEquity += margins[i] * _bTokens[i].price / ONE * _bTokens[i].discount / ONE;
-        }
-
-        IPToken.Position[] memory positions = pToken.getPositions(owner);
-        for (uint256 i = 0; i < slength; i++) {
-            if (positions[i].volume != 0) {
-                int256 cost = positions[i].volume * _symbols[i].price / ONE * _symbols[i].multiplier / ONE;
-                totalDynamicEquity += cost - positions[i].cost;
-                totalCost += cost.abs(); // netting costs cross symbols is forbidden
+        for (uint256 i = 0; i < data.margins.length; i++) {
+            if (data.bTokens[i].marginUpdated) {
+                pToken.updateMargin(data.trader, i, data.margins[i]);
             }
         }
-
-        return totalCost == 0 ? type(int256).max : totalDynamicEquity * ONE / totalCost;
+        for (uint256 i = 0; i < data.positions.length; i++) {
+            if (data.symbols[i].positionUpdated) {
+                pToken.updatePosition(data.trader, i, data.positions[i]);
+            }
+        }
     }
 
-    function _deflationCompatibleSafeTransferFrom(address bTokenAddress, uint256 decimals, address from, address to, uint256 bAmount)
-        internal returns (uint256)
-    {
-        IERC20 token = IERC20(bTokenAddress);
+    function _transferIn(address bTokenAddress, uint256 decimals, address from, uint256 bAmount) internal returns (uint256) {
+        bAmount = bAmount.rescale(18, decimals);
+        require(bAmount > 0, '0 bAmount');
 
-        uint256 balance1 = token.balanceOf(to);
-        token.safeTransferFrom(from, to, bAmount.rescale(18, decimals));
-        uint256 balance2 = token.balanceOf(to);
+        IERC20 bToken = IERC20(bTokenAddress);
+        uint256 balance1 = bToken.balanceOf(address(this));
+        bToken.safeTransferFrom(from, address(this), bAmount);
+        uint256 balance2 = bToken.balanceOf(address(this));
 
         return (balance2 - balance1).rescale(decimals, 18);
+    }
+
+    function _transferOut(address bTokenAddress, uint256 decimals, address to, uint256 bAmount) internal {
+        bAmount = bAmount.rescale(18, decimals);
+        IERC20(bTokenAddress).safeTransfer(to, bAmount);
+    }
+
+    function _accrueTail(int256 amount) internal returns (int256) {
+        int256 head = amount.reformat(_decimals0);
+        if (head == amount) return head;
+        if (head > amount) head -= int256(10**(18 - _decimals0));
+        _protocolFeeAccrued += amount - head;
+        return head;
     }
 
 }

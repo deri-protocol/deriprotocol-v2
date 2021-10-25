@@ -6,11 +6,12 @@ import '../interface/IPerpetualPoolLite.sol';
 import '../interface/ILTokenLite.sol';
 import '../interface/IPTokenLite.sol';
 import '../interface/IERC20.sol';
-import '../interface/IOracle.sol';
+import '../interface/IOracleViewer.sol';
 import '../interface/IOracleWithUpdate.sol';
 import '../interface/ILiquidatorQualifier.sol';
 import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
+import '../library/DpmmPricerFutures.sol';
 import '../utils/Migratable.sol';
 
 contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
@@ -22,9 +23,9 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
     int256  constant ONE = 10**18;
 
     uint256 _decimals;
-    int256  _minPoolMarginRatio;
-    int256  _minInitialMarginRatio;
-    int256  _minMaintenanceMarginRatio;
+    int256  _poolMarginRatio;
+    int256  _initialMarginRatio;
+    int256  _maintenanceMarginRatio;
     int256  _minLiquidationReward;
     int256  _maxLiquidationReward;
     int256  _liquidationCutRatio;
@@ -36,9 +37,11 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
     address _liquidatorQualifierAddress;
     address _protocolFeeCollector;
 
-    int256  _liquidity;
+    // funding period in seconds, funding collected for each volume during this period will be (dpmmPrice - indexPrice)
+    int256  _fundingPeriod = 3 * 24 * 3600 * ONE;
 
-    uint256 _lastUpdateBlock;
+    int256  _liquidity;
+    uint256 _lastTimestamp;
     int256  _protocolFeeAccrued;
 
     // symbolId => SymbolInfo
@@ -52,36 +55,14 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         _mutex = false;
     }
 
-    constructor (uint256[7] memory parameters, address[5] memory addresses) {
-        _controller = msg.sender;
-
-        _minPoolMarginRatio = int256(parameters[0]);
-        _minInitialMarginRatio = int256(parameters[1]);
-        _minMaintenanceMarginRatio = int256(parameters[2]);
-        _minLiquidationReward = int256(parameters[3]);
-        _maxLiquidationReward = int256(parameters[4]);
-        _liquidationCutRatio = int256(parameters[5]);
-        _protocolFeeCollectRatio = int256(parameters[6]);
-
-        _bTokenAddress = addresses[0];
-        _lTokenAddress = addresses[1];
-        _pTokenAddress = addresses[2];
-        _liquidatorQualifierAddress = addresses[3];
-        _protocolFeeCollector = addresses[4];
-
-        _decimals = IERC20(addresses[0]).decimals();
-    }
-
     // to initialize a cloned version of this contract
-    function initialize(address controller_, uint256[7] memory parameters, address[5] memory addresses) external {
+    function initialize(address controller, uint256[7] memory parameters, address[5] memory addresses) external {
         require(_bTokenAddress == address(0) && _controller == address(0), 'PerpetualPool: already initialized');
-        require(controller_ != address(0), 'PerpetualPool: invalid controller');
+        require(controller != address(0), 'PerpetualPool: invalid controller');
 
-        _controller = controller_;
-
-        _minPoolMarginRatio = int256(parameters[0]);
-        _minInitialMarginRatio = int256(parameters[1]);
-        _minMaintenanceMarginRatio = int256(parameters[2]);
+        _poolMarginRatio = int256(parameters[0]);
+        _initialMarginRatio = int256(parameters[1]);
+        _maintenanceMarginRatio = int256(parameters[2]);
         _minLiquidationReward = int256(parameters[3]);
         _maxLiquidationReward = int256(parameters[4]);
         _liquidationCutRatio = int256(parameters[5]);
@@ -94,6 +75,8 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         _protocolFeeCollector = addresses[4];
 
         _decimals = IERC20(addresses[0]).decimals();
+
+        _controller = controller;
     }
 
     // during a migration, this function is intended to be called in the source pool
@@ -110,8 +93,6 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
     function executeMigration(address source) external override _controller_ {
         uint256 migrationTimestamp_ = IPerpetualPoolLite(source).migrationTimestamp();
         address migrationDestination_ = IPerpetualPoolLite(source).migrationDestination();
-        require(migrationTimestamp_ != 0 && block.timestamp >= migrationTimestamp_, 'PerpetualPool: migrationTimestamp not met yet');
-        require(migrationDestination_ == address(this), 'PerpetualPool: not destination pool');
 
         // transfer bToken to this address
         IERC20(_bTokenAddress).safeTransferFrom(source, address(this), IERC20(_bTokenAddress).balanceOf(source));
@@ -123,26 +104,24 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         }
 
         // transfer state values
-        _liquidity = IPerpetualPoolLite(source).getLiquidity();
-        _lastUpdateBlock = IPerpetualPoolLite(source).getLastUpdateBlock();
-        _protocolFeeAccrued = IPerpetualPoolLite(source).getProtocolFeeAccrued();
+        (_liquidity, _lastTimestamp, _protocolFeeAccrued) = IPerpetualPoolLite(source).getPoolStateValues();
 
         emit ExecuteMigration(migrationTimestamp_, source, migrationDestination_);
     }
 
     function getParameters() external override view returns (
-        int256 minPoolMarginRatio,
-        int256 minInitialMarginRatio,
-        int256 minMaintenanceMarginRatio,
+        int256 poolMarginRatio,
+        int256 initialMarginRatio,
+        int256 maintenanceMarginRatio,
         int256 minLiquidationReward,
         int256 maxLiquidationReward,
         int256 liquidationCutRatio,
         int256 protocolFeeCollectRatio
     ) {
         return (
-            _minPoolMarginRatio,
-            _minInitialMarginRatio,
-            _minMaintenanceMarginRatio,
+            _poolMarginRatio,
+            _initialMarginRatio,
+            _maintenanceMarginRatio,
             _minLiquidationReward,
             _maxLiquidationReward,
             _liquidationCutRatio,
@@ -170,16 +149,8 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         return _symbols[symbolId];
     }
 
-    function getLiquidity() external override view returns (int256) {
-        return _liquidity;
-    }
-
-    function getLastUpdateBlock() external override view returns (uint256) {
-        return _lastUpdateBlock;
-    }
-
-    function getProtocolFeeAccrued() external override view returns (int256) {
-        return _protocolFeeAccrued;
+    function getPoolStateValues() external view override returns (int256 liquidity, uint256 lastTimestamp, int256 protocolFeeAccrued) {
+        return (_liquidity, _lastTimestamp, _protocolFeeAccrued);
     }
 
     function collectProtocolFee() external override {
@@ -191,13 +162,21 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         emit ProtocolFeeCollection(_protocolFeeCollector, amount);
     }
 
+    function getFundingPeriod() external view override returns (int256) {
+        return _fundingPeriod;
+    }
+
+    function setFundingPeriod(uint256 period) external override _controller_ {
+        _fundingPeriod = int256(period);
+    }
+
     function addSymbol(
         uint256 symbolId,
         string  memory symbol,
         address oracleAddress,
         uint256 multiplier,
         uint256 feeRatio,
-        uint256 fundingRateCoefficient
+        uint256 alpha
     ) external override _controller_ {
         SymbolInfo storage s = _symbols[symbolId];
         s.symbolId = symbolId;
@@ -205,8 +184,7 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         s.oracleAddress = oracleAddress;
         s.multiplier = int256(multiplier);
         s.feeRatio = int256(feeRatio);
-        s.fundingRateCoefficient = int256(fundingRateCoefficient);
-
+        s.alpha = int256(alpha);
         IPTokenLite(_pTokenAddress).addSymbolId(symbolId);
     }
 
@@ -219,97 +197,67 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         IPTokenLite(_pTokenAddress).toggleCloseOnly(symbolId);
     }
 
-    function setSymbolParameters(uint256 symbolId, address oracleAddress, uint256 feeRatio, uint256 fundingRateCoefficient) external override _controller_ {
+    function setSymbolParameters(
+        uint256 symbolId,
+        address oracleAddress,
+        uint256 feeRatio,
+        uint256 alpha
+    ) external override _controller_ {
         SymbolInfo storage s = _symbols[symbolId];
         s.oracleAddress = oracleAddress;
         s.feeRatio = int256(feeRatio);
-        s.fundingRateCoefficient = int256(fundingRateCoefficient);
+        s.alpha = int256(alpha);
     }
-
 
     //================================================================================
-    // Interactions with onchain oracles
-    //================================================================================
-
-    function addLiquidity(uint256 bAmount) external override {
-        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
-        _addLiquidity(msg.sender, bAmount);
-    }
-
-    function removeLiquidity(uint256 lShares) external override {
-        require(lShares > 0, 'PerpetualPool: 0 lShares');
-        _removeLiquidity(msg.sender, lShares);
-    }
-
-    function addMargin(uint256 bAmount) external override {
-        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
-        _addMargin(msg.sender, bAmount);
-    }
-
-    function removeMargin(uint256 bAmount) external override {
-        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
-        _removeMargin(msg.sender, bAmount);
-    }
-
-    function trade(uint256 symbolId, int256 tradeVolume) external override {
-        require(IPTokenLite(_pTokenAddress).isActiveSymbolId(symbolId), 'PerpetualPool: invalid symbolId');
-        require(tradeVolume != 0 && tradeVolume / ONE * ONE == tradeVolume, 'PerpetualPool: invalid tradeVolume');
-        _trade(msg.sender, symbolId, tradeVolume);
-    }
-
-    function liquidate(address account) external override {
-        address liquidator = msg.sender;
-        require(
-            _liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(_liquidatorQualifierAddress).isQualifiedLiquidator(liquidator),
-            'PerpetualPool: not qualified liquidator'
-        );
-        _liquidate(liquidator, account);
-    }
-
-
-    //================================================================================
-    // Interactions with offchain oracles
+    // Interactions
     //================================================================================
 
     function addLiquidity(uint256 bAmount, SignedPrice[] memory prices) external override {
-        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
-        _updateSymbolOracles(prices);
+        _updateSymbolPrices(prices);
         _addLiquidity(msg.sender, bAmount);
     }
 
     function removeLiquidity(uint256 lShares, SignedPrice[] memory prices) external override {
-        require(lShares > 0, 'PerpetualPool: 0 lShares');
-        _updateSymbolOracles(prices);
+        require(lShares > 0, '0 lShares');
+        _updateSymbolPrices(prices);
         _removeLiquidity(msg.sender, lShares);
     }
 
-    function addMargin(uint256 bAmount, SignedPrice[] memory prices) external override {
-        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
-        _updateSymbolOracles(prices);
+    function addMargin(uint256 bAmount) external override {
         _addMargin(msg.sender, bAmount);
     }
 
     function removeMargin(uint256 bAmount, SignedPrice[] memory prices) external override {
-        require(bAmount > 0, 'PerpetualPool: 0 bAmount');
-        _updateSymbolOracles(prices);
-        _removeMargin(msg.sender, bAmount);
+        address account = msg.sender;
+        require(bAmount > 0, '0 bAmount');
+        require(IPTokenLite(_pTokenAddress).exists(account), 'no pToken');
+        _updateSymbolPrices(prices);
+        _removeMargin(account, bAmount);
     }
 
     function trade(uint256 symbolId, int256 tradeVolume, SignedPrice[] memory prices) external override {
-        require(IPTokenLite(_pTokenAddress).isActiveSymbolId(symbolId), 'PerpetualPool: invalid symbolId');
-        require(tradeVolume != 0 && tradeVolume / ONE * ONE == tradeVolume, 'PerpetualPool: invalid tradeVolume');
-        _updateSymbolOracles(prices);
-        _trade(msg.sender, symbolId, tradeVolume);
+        address account = msg.sender;
+        require(IPTokenLite(_pTokenAddress).isActiveSymbolId(symbolId), 'inv symbolId');
+        require(IPTokenLite(_pTokenAddress).exists(account), 'no pToken');
+        require(tradeVolume != 0 && tradeVolume / ONE * ONE == tradeVolume, 'inv volume');
+        _updateSymbolPrices(prices);
+        _trade(account, symbolId, tradeVolume);
     }
 
-    function liquidate(address account, SignedPrice[] memory prices) external override {
+    function liquidate(address account, SignedPrice[] memory prices) public override {
         address liquidator = msg.sender;
         require(
             _liquidatorQualifierAddress == address(0) || ILiquidatorQualifier(_liquidatorQualifierAddress).isQualifiedLiquidator(liquidator),
-            'PerpetualPool: not qualified liquidator'
+            'unqualified'
         );
-        _updateSymbolOracles(prices);
+        require(IPTokenLite(_pTokenAddress).exists(account), 'no pToken');
+        _updateSymbolPrices(prices);
         _liquidate(liquidator, account);
+    }
+
+    function liquidate(uint256 pTokenId, SignedPrice[] memory prices) external override {
+        liquidate(IPTokenLite(_pTokenAddress).ownerOf(pTokenId), prices);
     }
 
 
@@ -318,16 +266,17 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
     //================================================================================
 
     function _addLiquidity(address account, uint256 bAmount) internal _lock_ {
-        (int256 totalDynamicEquity, ) = _updateSymbolPricesAndFundingRates();
         bAmount = _transferIn(account, bAmount);
         ILTokenLite lToken = ILTokenLite(_lTokenAddress);
+        DataSymbol[] memory symbols = _updateFundingRates(type(uint256).max);
 
+        int256 poolDynamicEquity = _getPoolPnl(symbols) + _liquidity;
         uint256 totalSupply = lToken.totalSupply();
         uint256 lShares;
         if (totalSupply == 0) {
             lShares = bAmount;
         } else {
-            lShares = bAmount * totalSupply / totalDynamicEquity.itou();
+            lShares = bAmount * totalSupply / poolDynamicEquity.itou();
         }
 
         lToken.mint(account, lShares);
@@ -337,19 +286,29 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
     }
 
     function _removeLiquidity(address account, uint256 lShares) internal _lock_ {
-        (int256 totalDynamicEquity, int256 totalAbsCost) = _updateSymbolPricesAndFundingRates();
         ILTokenLite lToken = ILTokenLite(_lTokenAddress);
+        DataSymbol[] memory symbols = _updateFundingRates(type(uint256).max);
 
+        int256 liquidity = _liquidity;
+        int256 poolPnlBefore = _getPoolPnl(symbols);
         uint256 totalSupply = lToken.totalSupply();
-        uint256 bAmount = lShares * totalDynamicEquity.itou() / totalSupply;
+        uint256 bAmount = lShares * (liquidity + poolPnlBefore).itou() / totalSupply;
+
+        liquidity -= bAmount.utoi();
+        for (uint256 i = 0; i < symbols.length; i++) {
+            DataSymbol memory s = symbols[i];
+            s.K = DpmmPricerFutures._calculateK(s.indexPrice, liquidity, s.alpha);
+            s.dpmmPrice = DpmmPricerFutures._calculateDpmmPrice(s.indexPrice, s.K, s.tradersNetPosition);
+        }
+        int256 poolPnlAfter = _getPoolPnl(symbols);
+
+        uint256 compensation = (poolPnlBefore - poolPnlAfter).itou();
+        bAmount -= compensation;
+
+        int256 poolRequiredMargin = _getPoolRequiredMargin(symbols);
+        require(liquidity + poolPnlAfter >= poolRequiredMargin, 'pool insuf liq');
 
         _liquidity -= bAmount.utoi();
-
-        require(
-            totalAbsCost == 0 || (totalDynamicEquity - bAmount.utoi()) * ONE / totalAbsCost >= _minPoolMarginRatio,
-            'PerpetualPool: pool insufficient margin'
-        );
-
         lToken.burn(account, lShares);
         _transferOut(account, bAmount);
 
@@ -358,7 +317,6 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
 
     function _addMargin(address account, uint256 bAmount) internal _lock_ {
         bAmount = _transferIn(account, bAmount);
-
         IPTokenLite pToken = IPTokenLite(_pTokenAddress);
         if (!pToken.exists(account)) pToken.mint(account);
 
@@ -367,110 +325,107 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
     }
 
     function _removeMargin(address account, uint256 bAmount) internal _lock_ {
-        _updateSymbolPricesAndFundingRates();
-        (uint256[] memory symbolIds,
-         IPTokenLite.Position[] memory positions,
-         bool[] memory positionUpdates,
-         int256 margin) = _settleTraderFundingFee(account);
+        DataSymbol[] memory symbols = _updateFundingRates(type(uint256).max);
+        (IPTokenLite.Position[] memory positions, int256 margin) = _settleTraderFundingFee(account, symbols);
 
+        // remove all available margin when bAmount >= margin
         int256 amount = bAmount.utoi();
-        if (amount >= margin) {
+        if (amount > margin) {
             amount = margin;
             bAmount = amount.itou();
-            margin = 0;
-        } else {
-            margin -= amount;
         }
+        margin -= amount;
 
-        require(_getTraderMarginRatio(symbolIds, positions, margin) >= _minInitialMarginRatio, 'PerpetualPool: insufficient margin');
+        (bool initialMarginSafe, ) = _getTraderMarginStatus(symbols, positions, margin);
+        require(initialMarginSafe, 'insuf margin');
 
-        _updateTraderPortfolio(account, symbolIds, positions, positionUpdates, margin);
+        _updateTraderPortfolio(account, symbols, positions, margin);
         _transferOut(account, bAmount);
 
         emit RemoveMargin(account, bAmount);
     }
 
-    // struct for temp use in trade function, to prevent stack too deep error
-    struct TradeParams {
-        int256 tradersNetVolume;
-        int256 price;
-        int256 multiplier;
-        int256 curCost;
-        int256 fee;
-        int256 realizedCost;
-        int256 protocolFee;
-    }
-
     function _trade(address account, uint256 symbolId, int256 tradeVolume) internal _lock_ {
-        (int256 totalDynamicEquity, int256 totalAbsCost) = _updateSymbolPricesAndFundingRates();
-        (uint256[] memory symbolIds,
-         IPTokenLite.Position[] memory positions,
-         bool[] memory positionUpdates,
-         int256 margin) = _settleTraderFundingFee(account);
+        DataSymbol[] memory symbols = _updateFundingRates(symbolId);
+        (IPTokenLite.Position[] memory positions, int256 margin) = _settleTraderFundingFee(account, symbols);
 
-        uint256 index;
-        for (uint256 i = 0; i < symbolIds.length; i++) {
-            if (symbolId == symbolIds[i]) {
-                index = i;
-                break;
-            }
-        }
+        // get pool pnl before trading
+        int256 poolPnl = _getPoolPnl(symbols);
 
-        TradeParams memory params;
+        DataSymbol memory s = symbols[0];
+        IPTokenLite.Position memory p = positions[0];
 
-        params.tradersNetVolume = _symbols[symbolId].tradersNetVolume;
-        params.price = _symbols[symbolId].price;
-        params.multiplier = _symbols[symbolId].multiplier;
-        params.curCost = tradeVolume * params.price / ONE * params.multiplier / ONE;
-        params.fee = params.curCost.abs() * _symbols[symbolId].feeRatio / ONE;
+        int256 curCost = DpmmPricerFutures._calculateDpmmCost(
+            s.indexPrice,
+            s.K,
+            s.tradersNetPosition,
+            tradeVolume * s.multiplier / ONE
+        );
 
-        if (!(positions[index].volume >= 0 && tradeVolume >= 0) && !(positions[index].volume <= 0 && tradeVolume <= 0)) {
-            int256 absVolume = positions[index].volume.abs();
+        emit Trade(account, symbolId, tradeVolume, curCost, _liquidity, s.tradersNetVolume, s.indexPrice);
+
+        int256 fee = curCost.abs() * s.feeRatio / ONE;
+
+        int256 realizedCost;
+        if (!(p.volume >= 0 && tradeVolume >= 0) && !(p.volume <= 0 && tradeVolume <= 0)) {
+            int256 absVolume = p.volume.abs();
             int256 absTradeVolume = tradeVolume.abs();
             if (absVolume <= absTradeVolume) {
                 // previous position is totally closed
-                params.realizedCost = params.curCost * absVolume / absTradeVolume + positions[index].cost;
+                realizedCost = curCost * absVolume / absTradeVolume + p.cost;
             } else {
                 // previous position is partially closed
-                params.realizedCost = positions[index].cost * absTradeVolume / absVolume + params.curCost;
+                realizedCost = p.cost * absTradeVolume / absVolume + curCost;
             }
         }
+        int256 toAddCost = curCost - realizedCost;
 
-        // adjust totalAbsCost after trading
-        totalAbsCost += ((params.tradersNetVolume + tradeVolume).abs() - params.tradersNetVolume.abs()) *
-                        params.price / ONE * params.multiplier / ONE;
+        p.volume += tradeVolume;
+        p.cost += toAddCost;
+        p.lastCumulativeFundingRate = s.cumulativeFundingRate;
 
-        positions[index].volume += tradeVolume;
-        positions[index].cost += params.curCost - params.realizedCost;
-        positions[index].lastCumulativeFundingRate = _symbols[symbolId].cumulativeFundingRate;
-        margin -= params.fee + params.realizedCost;
-        positionUpdates[index] = true;
+        margin -= fee + realizedCost;
+
+        s.positionUpdated = true;
+        s.tradersNetVolume += tradeVolume;
+        s.tradersNetCost += toAddCost;
+        s.tradersNetPosition = s.tradersNetVolume * s.multiplier / ONE;
 
         _symbols[symbolId].tradersNetVolume += tradeVolume;
-        _symbols[symbolId].tradersNetCost += params.curCost - params.realizedCost;
-        params.protocolFee = params.fee * _protocolFeeCollectRatio / ONE;
-        _protocolFeeAccrued += params.protocolFee;
-        _liquidity += params.fee - params.protocolFee + params.realizedCost;
+        _symbols[symbolId].tradersNetCost += toAddCost;
 
-        require(totalAbsCost == 0 || totalDynamicEquity * ONE / totalAbsCost >= _minPoolMarginRatio, 'PerpetualPool: insufficient liquidity');
-        require(_getTraderMarginRatio(symbolIds, positions, margin) >= _minInitialMarginRatio, 'PerpetualPool: insufficient margin');
+        int256 protocolFee = fee * _protocolFeeCollectRatio / ONE;
+        _protocolFeeAccrued += protocolFee;
+        _liquidity += fee - protocolFee + realizedCost;
 
-        _updateTraderPortfolio(account, symbolIds, positions, positionUpdates, margin);
+        require(_liquidity + poolPnl >= _getPoolRequiredMargin(symbols), 'insuf liquidity');
+        (bool initialMarginSafe, ) = _getTraderMarginStatus(symbols, positions, margin);
+        require(initialMarginSafe, 'insuf margin');
 
-        emit Trade(account, symbolId, tradeVolume, params.price.itou());
+        _updateTraderPortfolio(account, symbols, positions, margin);
     }
 
     function _liquidate(address liquidator, address account) internal _lock_ {
-        _updateSymbolPricesAndFundingRates();
-        (uint256[] memory symbolIds, IPTokenLite.Position[] memory positions, , int256 margin) = _settleTraderFundingFee(account);
-        require(_getTraderMarginRatio(symbolIds, positions, margin) < _minMaintenanceMarginRatio, 'PerpetualPool: cannot liquidate');
+        DataSymbol[] memory symbols = _updateFundingRates(type(uint256).max);
+        (IPTokenLite.Position[] memory positions, int256 margin) = _settleTraderFundingFee(account, symbols);
+
+        (, bool maintenanceMarginSafe) = _getTraderMarginStatus(symbols, positions, margin);
+        require(!maintenanceMarginSafe, 'cant liq');
 
         int256 netEquity = margin;
-        for (uint256 i = 0; i < symbolIds.length; i++) {
-            if (positions[i].volume != 0) {
-                _symbols[symbolIds[i]].tradersNetVolume -= positions[i].volume;
-                _symbols[symbolIds[i]].tradersNetCost -= positions[i].cost;
-                netEquity += positions[i].volume * _symbols[symbolIds[i]].price / ONE * _symbols[symbolIds[i]].multiplier / ONE - positions[i].cost;
+        for (uint256 i = 0; i < symbols.length; i++) {
+            DataSymbol memory s = symbols[i];
+            IPTokenLite.Position memory p = positions[i];
+            if (p.volume != 0) {
+                int256 curCost = DpmmPricerFutures._calculateDpmmCost(
+                    s.indexPrice,
+                    s.K,
+                    s.tradersNetPosition,
+                    -p.volume * s.multiplier / ONE
+                );
+                netEquity -= curCost + p.cost;
+                _symbols[s.symbolId].tradersNetVolume -= p.volume;
+                _symbols[s.symbolId].tradersNetCost -= p.cost;
             }
         }
 
@@ -495,7 +450,7 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
     // Helpers
     //================================================================================
 
-    function _updateSymbolOracles(SignedPrice[] memory prices) internal {
+    function _updateSymbolPrices(SignedPrice[] memory prices) internal {
         for (uint256 i = 0; i < prices.length; i++) {
             uint256 symbolId = prices[i].symbolId;
             IOracleWithUpdate(_symbols[symbolId].oracleAddress).updatePrice(
@@ -508,125 +463,161 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
         }
     }
 
-    function _updateSymbolPricesAndFundingRates() internal returns (int256 totalDynamicEquity, int256 totalAbsCost) {
-        uint256 preBlockNumber = _lastUpdateBlock;
-        uint256 curBlockNumber = block.number;
-        uint256[] memory symbolIds = IPTokenLite(_pTokenAddress).getActiveSymbolIds();
-        totalDynamicEquity = _liquidity;
-
-        for (uint256 i = 0; i < symbolIds.length; i++) {
-            SymbolInfo storage s = _symbols[symbolIds[i]];
-            if (curBlockNumber > preBlockNumber) {
-                s.price = IOracle(s.oracleAddress).getPrice().utoi();
-            }
-            if (s.tradersNetVolume != 0) {
-                int256 cost = s.tradersNetVolume * s.price / ONE * s.multiplier / ONE;
-                totalDynamicEquity -= cost - s.tradersNetCost;
-                totalAbsCost += cost.abs();
-            }
-        }
-
-        if (curBlockNumber > preBlockNumber) {
-            for (uint256 i = 0; i < symbolIds.length; i++) {
-                SymbolInfo storage s = _symbols[symbolIds[i]];
-                if (s.tradersNetVolume != 0) {
-                    int256 ratePerBlock = s.tradersNetVolume * s.price / ONE * s.price / ONE * s.multiplier / ONE * s.multiplier / ONE * s.fundingRateCoefficient / totalDynamicEquity;
-                    int256 delta = ratePerBlock * int256(curBlockNumber - preBlockNumber);
-                    unchecked { s.cumulativeFundingRate += delta; }
-                }
-            }
-        }
-
-        _lastUpdateBlock = curBlockNumber;
+    struct DataSymbol {
+        uint256 symbolId;
+        int256  multiplier;
+        int256  feeRatio;
+        int256  alpha;
+        int256  indexPrice;
+        int256  dpmmPrice;
+        int256  K;
+        int256  tradersNetVolume;
+        int256  tradersNetCost;
+        int256  cumulativeFundingRate;
+        int256  tradersNetPosition; // volume * multiplier
+        bool    positionUpdated;
     }
 
-    function _getTraderPortfolio(address account) internal view returns (
-        uint256[] memory symbolIds,
-        IPTokenLite.Position[] memory positions,
-        bool[] memory positionUpdates,
-        int256 margin
-    ) {
+    // Gether data for valid symbols for later use
+    // Calculate those symbol parameters that will not change during this transaction
+    // Symbols with no position holders are excluded
+    function _getSymbols(uint256 tradeSymbolId) internal view returns (DataSymbol[] memory symbols) {
         IPTokenLite pToken = IPTokenLite(_pTokenAddress);
-        symbolIds = pToken.getActiveSymbolIds();
-
-        positions = new IPTokenLite.Position[](symbolIds.length);
-        positionUpdates = new bool[](symbolIds.length);
-        for (uint256 i = 0; i < symbolIds.length; i++) {
-            positions[i] = pToken.getPosition(account, symbolIds[i]);
+        uint256[] memory activeSymbolIds = pToken.getActiveSymbolIds();
+        uint256[] memory symbolIds = new uint256[](activeSymbolIds.length);
+        uint256 count;
+        if (tradeSymbolId != type(uint256).max) {
+            symbolIds[0] = tradeSymbolId;
+            count = 1;
+        }
+        for (uint256 i = 0; i < activeSymbolIds.length; i++) {
+            if (activeSymbolIds[i] != tradeSymbolId && pToken.getNumPositionHolders(activeSymbolIds[i]) != 0) {
+                symbolIds[count++] = activeSymbolIds[i];
+            }
         }
 
+        symbols = new DataSymbol[](count);
+        int256 liquidity = _liquidity;
+        for (uint256 i = 0; i < count; i++) {
+            SymbolInfo storage ss = _symbols[symbolIds[i]];
+            DataSymbol memory s = symbols[i];
+            s.symbolId = symbolIds[i];
+            s.multiplier = ss.multiplier;
+            s.feeRatio = ss.feeRatio;
+            s.alpha = ss.alpha;
+            s.indexPrice = IOracleViewer(ss.oracleAddress).getPrice().utoi();
+            s.tradersNetVolume = ss.tradersNetVolume;
+            s.tradersNetCost = ss.tradersNetCost;
+            s.cumulativeFundingRate = ss.cumulativeFundingRate;
+            s.tradersNetPosition = s.tradersNetVolume * s.multiplier / ONE;
+            s.K = DpmmPricerFutures._calculateK(s.indexPrice, liquidity, s.alpha);
+            s.dpmmPrice = DpmmPricerFutures._calculateDpmmPrice(s.indexPrice, s.K, s.tradersNetPosition);
+        }
+    }
+
+    function _updateFundingRates(uint256 tradeSymbolId) internal returns (DataSymbol[] memory symbols) {
+        uint256 preTimestamp = _lastTimestamp;
+        uint256 curTimestamp = block.timestamp;
+        symbols = _getSymbols(tradeSymbolId);
+        if (curTimestamp > preTimestamp) {
+            int256 fundingPeriod = _fundingPeriod;
+            for (uint256 i = 0; i < symbols.length; i++) {
+                DataSymbol memory s = symbols[i];
+                int256 ratePerSecond = (s.dpmmPrice - s.indexPrice) * s.multiplier / fundingPeriod;
+                int256 diff = ratePerSecond * int256(curTimestamp - preTimestamp);
+                unchecked { s.cumulativeFundingRate += diff; }
+                _symbols[s.symbolId].cumulativeFundingRate = s.cumulativeFundingRate;
+            }
+        }
+        _lastTimestamp = curTimestamp;
+    }
+
+    function _getPoolPnl(DataSymbol[] memory symbols) internal pure returns (int256 poolPnl) {
+        for (uint256 i = 0; i < symbols.length; i++) {
+            DataSymbol memory s = symbols[i];
+            poolPnl += DpmmPricerFutures._calculateDpmmCost(s.indexPrice, s.K, s.tradersNetPosition, -s.tradersNetPosition) + s.tradersNetCost;
+        }
+    }
+
+    function _getPoolRequiredMargin(DataSymbol[] memory symbols) internal view returns (int256 poolRequiredMargin) {
+        for (uint256 i = 0; i < symbols.length; i++) {
+            DataSymbol memory s = symbols[i];
+            int256 notional = (s.tradersNetPosition * s.indexPrice / ONE).abs();
+            poolRequiredMargin += notional * _poolMarginRatio / ONE;
+        }
+    }
+
+    function _settleTraderFundingFee(address account, DataSymbol[] memory symbols)
+    internal returns (IPTokenLite.Position[] memory positions, int256 margin)
+    {
+        IPTokenLite pToken = IPTokenLite(_pTokenAddress);
+        positions = new IPTokenLite.Position[](symbols.length);
         margin = pToken.getMargin(account);
+
+        int256 funding;
+        for (uint256 i = 0; i < symbols.length; i++) {
+            IPTokenLite.Position memory p = pToken.getPosition(account, symbols[i].symbolId);
+            if (p.volume != 0) {
+                int256 diff;
+                unchecked { diff = symbols[i].cumulativeFundingRate - p.lastCumulativeFundingRate; }
+                funding += p.volume * diff / ONE;
+                p.lastCumulativeFundingRate = symbols[i].cumulativeFundingRate;
+                symbols[i].positionUpdated = true;
+                positions[i] = p;
+            }
+        }
+
+        margin -= funding;
+        _liquidity += funding;
+    }
+
+    function _getTraderMarginStatus(
+        DataSymbol[] memory symbols,
+        IPTokenLite.Position[] memory positions,
+        int256 margin
+    ) internal view returns (bool initialMarginSafe, bool maintenanceMarginSafe)
+    {
+        int256 dynamicMargin = margin;
+        int256 requiredInitialMargin;
+        for (uint256 i = 0; i < symbols.length; i++) {
+            DataSymbol memory s = symbols[i];
+            IPTokenLite.Position memory p = positions[i];
+            if (p.volume != 0) {
+                dynamicMargin -= DpmmPricerFutures._calculateDpmmCost(s.indexPrice, s.K, s.tradersNetPosition, -p.volume * s.multiplier / ONE) + p.cost;
+                int256 notional = (p.volume * s.indexPrice / ONE * s.multiplier / ONE).abs();
+                requiredInitialMargin += notional * _initialMarginRatio / ONE;
+            }
+        }
+        int256 requiredMaintenanceMargin = requiredInitialMargin * _maintenanceMarginRatio / _initialMarginRatio;
+        return (
+            dynamicMargin >= requiredInitialMargin,
+            dynamicMargin >= requiredMaintenanceMargin
+        );
     }
 
     function _updateTraderPortfolio(
         address account,
-        uint256[] memory symbolIds,
+        DataSymbol[] memory symbols,
         IPTokenLite.Position[] memory positions,
-        bool[] memory positionUpdates,
         int256 margin
     ) internal {
         IPTokenLite pToken = IPTokenLite(_pTokenAddress);
-        for (uint256 i = 0; i < symbolIds.length; i++) {
-            if (positionUpdates[i]) {
-                pToken.updatePosition(account, symbolIds[i], positions[i]);
+        for (uint256 i = 0; i < symbols.length; i++) {
+            if (symbols[i].positionUpdated) {
+                pToken.updatePosition(account, symbols[i].symbolId, positions[i]);
             }
         }
         pToken.updateMargin(account, margin);
     }
 
-    function _settleTraderFundingFee(address account) internal returns (
-        uint256[] memory symbolIds,
-        IPTokenLite.Position[] memory positions,
-        bool[] memory positionUpdates,
-        int256 margin
-    ) {
-        (symbolIds, positions, positionUpdates, margin) = _getTraderPortfolio(account);
-        int256 funding;
-        for (uint256 i = 0; i < symbolIds.length; i++) {
-            if (positions[i].volume != 0) {
-                int256 cumulativeFundingRate = _symbols[symbolIds[i]].cumulativeFundingRate;
-                int256 delta;
-                unchecked { delta = cumulativeFundingRate - positions[i].lastCumulativeFundingRate; }
-                funding += positions[i].volume * delta / ONE;
-
-                positions[i].lastCumulativeFundingRate = cumulativeFundingRate;
-                positionUpdates[i] = true;
-            }
-        }
-        if (funding != 0) {
-            margin -= funding;
-            _liquidity += funding;
-        }
-    }
-
-    function _getTraderMarginRatio(
-        uint256[] memory symbolIds,
-        IPTokenLite.Position[] memory positions,
-        int256 margin
-    ) internal view returns (int256) {
-        int256 totalDynamicEquity = margin;
-        int256 totalAbsCost;
-        for (uint256 i = 0; i < symbolIds.length; i++) {
-            if (positions[i].volume != 0) {
-                int256 cost = positions[i].volume * _symbols[symbolIds[i]].price / ONE * _symbols[symbolIds[i]].multiplier / ONE;
-                totalDynamicEquity += cost - positions[i].cost;
-                totalAbsCost += cost.abs();
-            }
-        }
-        return totalAbsCost == 0 ? type(int256).max : totalDynamicEquity * ONE / totalAbsCost;
-    }
-
-    function _deflationCompatibleSafeTransferFrom(address from, address to, uint256 bAmount) internal returns (uint256) {
-        IERC20 bToken = IERC20(_bTokenAddress);
-        uint256 balance1 = bToken.balanceOf(to);
-        bToken.safeTransferFrom(from, to, bAmount);
-        uint256 balance2 = bToken.balanceOf(to);
-        return balance2 - balance1;
-    }
-
     function _transferIn(address from, uint256 bAmount) internal returns (uint256) {
-        uint256 amount = _deflationCompatibleSafeTransferFrom(from, address(this), bAmount.rescale(18, _decimals));
-        return amount.rescale(_decimals, 18);
+        uint256 amount = bAmount.rescale(18, _decimals);
+        require(amount > 0, '0 bAmount');
+        IERC20 bToken = IERC20(_bTokenAddress);
+        uint256 balance1 = bToken.balanceOf(address(this));
+        bToken.safeTransferFrom(from, address(this), amount);
+        uint256 balance2 = bToken.balanceOf(address(this));
+        return (balance2 - balance1).rescale(_decimals, 18);
     }
 
     function _transferOut(address to, uint256 bAmount) internal {

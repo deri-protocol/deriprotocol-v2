@@ -35,7 +35,7 @@ interface IPerpetualPoolRouter is IMigratable {
         address oracleAddress,
         uint256 multiplier,
         uint256 feeRatio,
-        uint256 fundingRateCoefficient
+        uint256 alpha
     ) external;
 
     function setBTokenParameters(
@@ -49,7 +49,7 @@ interface IPerpetualPoolRouter is IMigratable {
         uint256 symbolId,
         address oracleAddress,
         uint256 feeRatio,
-        uint256 fundingRateCoefficient
+        uint256 alpha
     ) external;
 
 
@@ -65,6 +65,8 @@ interface IPerpetualPoolRouter is IMigratable {
 
     function liquidate(address owner) external;
 
+    function liquidate(uint256 pTokenId) external;
+
     function addLiquidityWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external;
 
     function removeLiquidityWithPrices(uint256 bTokenId, uint256 bAmount, PriceInfo[] memory infos) external;
@@ -76,5 +78,7 @@ interface IPerpetualPoolRouter is IMigratable {
     function tradeWithPrices(uint256 symbolId, int256 tradeVolume, PriceInfo[] memory infos) external;
 
     function liquidateWithPrices(address owner, PriceInfo[] memory infos) external;
+
+    function liquidateWithPrices(uint256 pTokenId, PriceInfo[] memory infos) external;
 
 }

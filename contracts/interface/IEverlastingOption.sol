@@ -112,4 +112,6 @@ interface IEverlastingOption is IMigratable {
 
     function liquidate(address account, SignedValue[] memory volatilities) external;
 
+    function liquidate(uint256 pTokenId, SignedValue[] memory volatilities) external;
+
 }

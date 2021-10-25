@@ -4,7 +4,7 @@ pragma solidity >=0.8.0 <0.9.0;
 
 import '../interface/IMigratable.sol';
 
-interface IPerpetualPoolLite is IMigratable {
+interface IPerpetualPoolLiteOld is IMigratable {
 
     struct SymbolInfo {
         uint256 symbolId;
@@ -12,10 +12,11 @@ interface IPerpetualPoolLite is IMigratable {
         address oracleAddress;
         int256  multiplier;
         int256  feeRatio;
-        int256  alpha;
+        int256  fundingRateCoefficient;
+        int256  price;
+        int256  cumulativeFundingRate;
         int256  tradersNetVolume;
         int256  tradersNetCost;
-        int256  cumulativeFundingRate;
     }
 
     struct SignedPrice {
@@ -35,24 +36,16 @@ interface IPerpetualPoolLite is IMigratable {
 
     event RemoveMargin(address indexed account, uint256 bAmount);
 
-    event Trade(
-        address indexed account,
-        uint256 indexed symbolId,
-        int256 tradeVolume,
-        int256 tradeCost,
-        int256 liquidity,
-        int256 tradersNetVolume,
-        int256 indexPrice
-    );
+    event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, uint256 price);
 
     event Liquidate(address indexed account, address indexed liquidator, uint256 reward);
 
     event ProtocolFeeCollection(address indexed collector, uint256 amount);
 
     function getParameters() external view returns (
-        int256 poolMarginRatio,
-        int256 initialMarginRatio,
-        int256 maintenanceMarginRatio,
+        int256 minPoolMarginRatio,
+        int256 minInitialMarginRatio,
+        int256 minMaintenanceMarginRatio,
         int256 minLiquidationReward,
         int256 maxLiquidationReward,
         int256 liquidationCutRatio,
@@ -69,13 +62,13 @@ interface IPerpetualPoolLite is IMigratable {
 
     function getSymbol(uint256 symbolId) external view returns (SymbolInfo memory);
 
-    function getPoolStateValues() external view returns (int256 liquidity, uint256 lastTimestamp, int256 protocolFeeAccrued);
+    function getLiquidity() external view returns (int256);
+
+    function getLastUpdateBlock() external view returns (uint256);
+
+    function getProtocolFeeAccrued() external view returns (int256);
 
     function collectProtocolFee() external;
-
-    function getFundingPeriod() external view returns (int256);
-
-    function setFundingPeriod(uint256 period) external;
 
     function addSymbol(
         uint256 symbolId,
@@ -83,32 +76,37 @@ interface IPerpetualPoolLite is IMigratable {
         address oracleAddress,
         uint256 multiplier,
         uint256 feeRatio,
-        uint256 alpha
+        uint256 fundingRateCoefficient
     ) external;
 
     function removeSymbol(uint256 symbolId) external;
 
     function toggleCloseOnly(uint256 symbolId) external;
 
-    function setSymbolParameters(
-        uint256 symbolId,
-        address oracleAddress,
-        uint256 feeRatio,
-        uint256 alpha
-    ) external;
+    function setSymbolParameters(uint256 symbolId, address oracleAddress, uint256 feeRatio, uint256 fundingRateCoefficient) external;
+
+    function addLiquidity(uint256 bAmount) external;
+
+    function removeLiquidity(uint256 lShares) external;
+
+    function addMargin(uint256 bAmount) external;
+
+    function removeMargin(uint256 bAmount) external;
+
+    function trade(uint256 symbolId, int256 tradeVolume) external;
+
+    function liquidate(address account) external;
 
     function addLiquidity(uint256 bAmount, SignedPrice[] memory prices) external;
 
     function removeLiquidity(uint256 lShares, SignedPrice[] memory prices) external;
 
-    function addMargin(uint256 bAmount) external;
+    function addMargin(uint256 bAmount, SignedPrice[] memory prices) external;
 
     function removeMargin(uint256 bAmount, SignedPrice[] memory prices) external;
 
     function trade(uint256 symbolId, int256 tradeVolume, SignedPrice[] memory prices) external;
 
     function liquidate(address account, SignedPrice[] memory prices) external;
-
-    function liquidate(uint256 pTokenId, SignedPrice[] memory prices) external;
 
 }
