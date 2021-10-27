@@ -101,7 +101,7 @@ contract PerpetualPoolRouter is IPerpetualPoolRouter, Migratable {
                 s.oracleAddress,
                 s.multiplier,
                 s.feeRatio,
-                ONE / 100, // alpha
+                ONE * 3 / 10, // alpha 0.3
                 distributedUnrealizedPnl,
                 s.tradersNetVolume,
                 s.tradersNetCost,

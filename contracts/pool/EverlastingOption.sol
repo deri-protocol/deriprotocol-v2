@@ -10,7 +10,6 @@ import '../interface/IOracleViewer.sol';
 import '../interface/IVolatilityOracle.sol';
 import '../interface/ILiquidatorQualifier.sol';
 import "../interface/IEverlastingOption.sol";
-import "../interface/IEverlastingOptionOld.sol";
 import '../library/SafeMath.sol';
 import '../library/SafeERC20.sol';
 import '../utils/Migratable.sol';
@@ -90,8 +89,8 @@ contract EverlastingOption is IEverlastingOption, Migratable {
 
     // during a migration, this function is intended to be called in the target pool
     function executeMigration(address source) external override _controller_ {
-        uint256 migrationTimestamp_ = IEverlastingOptionOld(source).migrationTimestamp();
-        address migrationDestination_ = IEverlastingOptionOld(source).migrationDestination();
+        uint256 migrationTimestamp_ = IEverlastingOption(source).migrationTimestamp();
+        address migrationDestination_ = IEverlastingOption(source).migrationDestination();
         require(migrationTimestamp_ != 0 && block.timestamp >= migrationTimestamp_, 'time inv');
         require(migrationDestination_ == address(this), 'not dest');
 
@@ -102,25 +101,11 @@ contract EverlastingOption is IEverlastingOption, Migratable {
         uint256[] memory symbolIds = IPTokenOption(_pTokenAddress).getActiveSymbolIds();
         for (uint256 i = 0; i < symbolIds.length; i++) {
             uint256 symbolId = symbolIds[i];
-            IEverlastingOptionOld.SymbolInfo memory pre = IEverlastingOptionOld(source).getSymbol(symbolId);
-            SymbolInfo storage cur = _symbols[symbolId];
-            cur.symbolId = pre.symbolId;
-            cur.symbol = pre.symbol;
-            cur.oracleAddress = pre.oracleAddress;
-            cur.volatilityAddress = pre.volatilityAddress;
-            cur.isCall = pre.isCall;
-            cur.strikePrice = pre.strikePrice;
-            cur.multiplier = pre.multiplier;
-            cur.feeRatioITM = ONE * 15 / 10000;
-            cur.feeRatioOTM = ONE * 4 / 100;
-            cur.alpha = pre.alpha;
-            cur.tradersNetVolume = pre.tradersNetVolume;
-            cur.tradersNetCost = pre.tradersNetCost;
-            cur.cumulativeFundingRate = pre.cumulativeFundingRate;
+            _symbols[symbolId] = IEverlastingOption(source).getSymbol(symbolId);
         }
 
         // transfer state values
-        (_liquidity, _lastTimestamp, _protocolFeeAccrued) = IEverlastingOptionOld(source).getPoolStateValues();
+        (_liquidity, _lastTimestamp, _protocolFeeAccrued) = IEverlastingOption(source).getPoolStateValues();
 
         emit ExecuteMigration(migrationTimestamp_, source, migrationDestination_);
     }
