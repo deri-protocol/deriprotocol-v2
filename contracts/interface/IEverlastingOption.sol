@@ -31,18 +31,24 @@ interface IEverlastingOption is IMigratable {
         bytes32 s;
     }
 
-    event AddLiquidity(address indexed account, uint256 lShares, uint256 bAmount);
+    event AddLiquidity(address indexed lp, uint256 lShares, uint256 bAmount);
 
-    event RemoveLiquidity(address indexed account, uint256 lShares, uint256 bAmount);
+    event RemoveLiquidity(address indexed lp, uint256 lShares, uint256 bAmount);
 
-    event AddMargin(address indexed account, uint256 bAmount);
+    event AddMargin(address indexed trader, uint256 bAmount);
 
-    event RemoveMargin(address indexed account, uint256 bAmount);
+    event RemoveMargin(address indexed trader, uint256 bAmount);
 
-    event Trade(address indexed account, uint256 indexed symbolId, int256 tradeVolume, int256 tradeCost,
-                int256 liquidity, int256 tradersNetVolume, int256 spotPrice, int256 volatility);
+    event Trade(
+        address indexed trader,
+        uint256 indexed symbolId,
+        int256 indexPrice,
+        int256 tradeVolume,
+        int256 tradeCost,
+        int256 tradeFee // a -1 tradeFee corresponds to a liquidation trade
+    );
 
-    event Liquidate(address indexed account, address indexed liquidator, uint256 reward);
+    event Liquidate(address indexed trader, address indexed liquidator, uint256 reward);
 
     event ProtocolFeeCollection(address indexed collector, uint256 amount);
 

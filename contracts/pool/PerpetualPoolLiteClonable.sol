@@ -362,9 +362,9 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
             tradeVolume * s.multiplier / ONE
         );
 
-        emit Trade(account, symbolId, tradeVolume, curCost, _liquidity, s.tradersNetVolume, s.indexPrice);
-
         int256 fee = curCost.abs() * s.feeRatio / ONE;
+
+        emit Trade(account, symbolId, s.indexPrice, tradeVolume, curCost, fee);
 
         int256 realizedCost;
         if (!(p.volume >= 0 && tradeVolume >= 0) && !(p.volume <= 0 && tradeVolume <= 0)) {
@@ -426,6 +426,7 @@ contract PerpetualPoolLiteClonable is IPerpetualPoolLite, Migratable {
                 netEquity -= curCost + p.cost;
                 _symbols[s.symbolId].tradersNetVolume -= p.volume;
                 _symbols[s.symbolId].tradersNetCost -= p.cost;
+                emit Trade(account, s.symbolId, s.indexPrice, -p.volume, curCost, -1);
             }
         }
 

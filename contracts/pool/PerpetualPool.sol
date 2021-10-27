@@ -476,7 +476,7 @@ contract PerpetualPool is IPerpetualPool {
         require(data.totalEquity * ONE >= data.totalNotional * _minPoolMarginRatio, "insuf't liq");
         require(data.totalTraderEquity * ONE >= data.totalTraderNontional * _initialMarginRatio, "insuf't margin");
 
-        emit Trade(trader, symbolId, tradeVolume, curCost);
+        emit Trade(trader, symbolId, s.indexPrice, tradeVolume, curCost, fee);
     }
 
     function liquidate(address liquidator, address trader) external override _lock_ {
@@ -503,6 +503,7 @@ contract PerpetualPool is IPerpetualPool {
                 s.distributedUnrealizedPnl -= s.traderPnl;
                 s.tradersNetVolume -= p.volume;
                 s.tradersNetCost -= p.cost;
+                emit Trade(trader, i, s.indexPrice, -p.volume, -p.cost - s.traderPnl, -1);
             }
         }
         netEquity += data.totalTraderPnl;

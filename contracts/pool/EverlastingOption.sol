@@ -376,14 +376,14 @@ contract EverlastingOption is IEverlastingOption, Migratable {
             s.K
         );
 
-        emit Trade(account, symbolId, tradeVolume, curCost, _liquidity, s.tradersNetVolume, s.spotPrice, s.volatility);
-
         int256 fee;
         if (s.intrinsicValue > 0) {
             fee = s.spotPrice * tradeVolume.abs() / ONE * s.multiplier / ONE * s.feeRatioITM / ONE;
         } else {
             fee = curCost.abs() * s.feeRatioOTM / ONE;
         }
+
+        emit Trade(account, symbolId, s.spotPrice, tradeVolume, curCost, fee);
 
         int256 realizedCost;
         if (!(p.volume >= 0 && tradeVolume >= 0) && !(p.volume <= 0 && tradeVolume <= 0)) {
@@ -446,6 +446,7 @@ contract EverlastingOption is IEverlastingOption, Migratable {
                 netEquity -= curCost + p.cost;
                 _symbols[s.symbolId].tradersNetVolume -= p.volume;
                 _symbols[s.symbolId].tradersNetCost -= p.cost;
+                emit Trade(account, s.symbolId, s.spotPrice, -p.volume, curCost, -1);
             }
         }
 
