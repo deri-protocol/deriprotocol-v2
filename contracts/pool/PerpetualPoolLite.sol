@@ -87,11 +87,11 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
     }
 
     // during a migration, this function is intended to be called in the target pool
-    // the original `executeMigration` is just a place holder, instead `executeMigrationSwitchToTimestamp` will be executed during migration
+    // the original `executeMigration` is just a place holder, instead `executeMigrationWithTimestamp` will be executed during migration
     // in order to change the funding calculation from blocks to timestamp
     function executeMigration(address source) external override _controller_ {}
 
-    function executeMigrationSwitchToTimestamp(address source, uint256 lastBlockNumber, uint256 lastBlockTimestamp) external _controller_ {
+    function executeMigrationWithTimestamp(address source, uint256 lastTimestamp) external _controller_ {
         uint256 migrationTimestamp_ = IPerpetualPoolLiteOld(source).migrationTimestamp();
         address migrationDestination_ = IPerpetualPoolLiteOld(source).migrationDestination();
 
@@ -103,7 +103,7 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
         for (uint256 i = 0; i < symbolIds.length; i++) {
             uint256 symbolId = symbolIds[i];
             IPerpetualPoolLiteOld.SymbolInfo memory pre = IPerpetualPoolLiteOld(source).getSymbol(symbolId);
-            SymbolInfo memory cur = _symbols[symbolId];
+            SymbolInfo storage cur = _symbols[symbolId];
             cur.symbolId = pre.symbolId;
             cur.symbol = pre.symbol;
             cur.oracleAddress = pre.oracleAddress;
@@ -118,9 +118,7 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
         // transfer state values
         _liquidity = IPerpetualPoolLiteOld(source).getLiquidity();
         _protocolFeeAccrued = IPerpetualPoolLiteOld(source).getProtocolFeeAccrued();
-
-        require(IPerpetualPoolLiteOld(source).getLastUpdateBlock() == lastBlockNumber, 'lastBlock mismatch');
-        _lastTimestamp = lastBlockTimestamp;
+        _lastTimestamp = lastTimestamp;
 
         emit ExecuteMigration(migrationTimestamp_, source, migrationDestination_);
     }
@@ -378,9 +376,9 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
             tradeVolume * s.multiplier / ONE
         );
 
-        emit Trade(account, symbolId, tradeVolume, curCost, _liquidity, s.tradersNetVolume, s.indexPrice);
-
         int256 fee = curCost.abs() * s.feeRatio / ONE;
+
+        emit Trade(account, symbolId, s.indexPrice, tradeVolume, curCost, fee);
 
         int256 realizedCost;
         if (!(p.volume >= 0 && tradeVolume >= 0) && !(p.volume <= 0 && tradeVolume <= 0)) {
@@ -442,6 +440,7 @@ contract PerpetualPoolLite is IPerpetualPoolLite, Migratable {
                 netEquity -= curCost + p.cost;
                 _symbols[s.symbolId].tradersNetVolume -= p.volume;
                 _symbols[s.symbolId].tradersNetCost -= p.cost;
+                emit Trade(account, s.symbolId, s.indexPrice, -p.volume, curCost, -1);
             }
         }
 

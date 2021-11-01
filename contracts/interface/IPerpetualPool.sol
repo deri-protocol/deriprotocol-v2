@@ -35,7 +35,14 @@ interface IPerpetualPool {
 
     event RemoveMargin(address indexed trader, uint256 indexed bTokenId, uint256 bAmount);
 
-    event Trade(address indexed trader, uint256 indexed symbolId, int256 tradeVolume, int256 tradeCost);
+    event Trade(
+        address indexed trader,
+        uint256 indexed symbolId,
+        int256 indexPrice,
+        int256 tradeVolume,
+        int256 tradeCost,
+        int256 tradeFee // a -1 tradeFee corresponds to a liquidation trade
+    );
 
     event Liquidate(address indexed trader, address indexed liquidator, uint256 reward);
 
